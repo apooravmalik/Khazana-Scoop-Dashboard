@@ -1,6 +1,10 @@
 import Link from "next/link";
 
-import { createOrderAction, updateOrderStatusAction } from "@/app/actions";
+import {
+  createOrderAction,
+  deleteOrderAction,
+  updateOrderStatusAction,
+} from "@/app/actions";
 import { OrderBuilder } from "@/components/order-builder";
 import { AppShell } from "@/components/app-shell";
 import { StatusPill } from "@/components/status-pill";
@@ -19,9 +23,11 @@ function formatError(error: string) {
 
 export default async function OrdersPage({ searchParams }: OrdersPageProps) {
   const params = await searchParams;
-  const products = getProducts();
-  const scoopTypes = getScoopTypes();
-  const orders = getOrders();
+  const [products, scoopTypes, orders] = await Promise.all([
+    getProducts(),
+    getScoopTypes(),
+    getOrders(),
+  ]);
   const pendingCount = orders.filter((order) => order.delivery_status === "pending").length;
   const deliveringCount = orders.filter(
     (order) => order.delivery_status === "delivering",
@@ -71,7 +77,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+      <section className="grid gap-6 2xl:grid-cols-[0.95fr_1.05fr]">
         <Surface
           title="Create a new order"
           description="Flow: customer details, scoop selection, gift checklist, then an automatic stock and profit snapshot."
@@ -150,7 +156,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
                     </div>
                   </div>
 
-                    <div className="mt-4 grid gap-3 rounded-[1.2rem] border border-stone-200 bg-white p-4 md:grid-cols-4">
+                  <div className="mt-4 grid gap-3 rounded-[1.2rem] border border-stone-200 bg-white p-4 sm:grid-cols-2 2xl:grid-cols-4">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
                         Scoop revenue
@@ -191,7 +197,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
                     </div>
                   ) : null}
 
-                  <div className="mt-4 grid gap-4 md:grid-cols-5">
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
                     <label className="block">
                       <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
                         Delivery
@@ -271,12 +277,20 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
 
                   <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <p className="text-xs text-stone-500">{order.customer_address}</p>
-                    <button
-                      type="submit"
-                      className="inline-flex items-center rounded-full border border-stone-950 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-stone-950 hover:text-stone-50"
-                    >
-                      Update order
-                    </button>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Link
+                        href={`/orders/${order.id}`}
+                        className="inline-flex items-center rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 transition hover:border-stone-950 hover:text-stone-950"
+                      >
+                        Edit details
+                      </Link>
+                      <button
+                        type="submit"
+                        className="inline-flex items-center rounded-full border border-stone-950 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-stone-950 hover:text-stone-50"
+                      >
+                        Quick update
+                      </button>
+                    </div>
                   </div>
                 </form>
               ))
@@ -288,6 +302,41 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
           </div>
         </Surface>
       </section>
+
+      <Surface
+        title="Delete an order"
+        description="Deleting an order restores the selected gifts back to stock and removes the order record."
+      >
+        <div className="space-y-3">
+          {orders.length > 0 ? (
+            orders.map((order) => (
+              <form
+                key={`delete-${order.id}`}
+                action={deleteOrderAction}
+                className="flex flex-col gap-3 rounded-[1.25rem] border border-stone-200 bg-stone-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <input type="hidden" name="order_id" value={order.id} />
+                <div>
+                  <p className="font-semibold text-stone-900">
+                    #{order.id} · {order.customer_name}
+                  </p>
+                  <p className="mt-1 text-sm text-stone-600">
+                    {order.scoop_name} · {order.products_summary}
+                  </p>
+                </div>
+                <button
+                  type="submit"
+                  className="inline-flex items-center rounded-full border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:border-rose-600 hover:bg-rose-600 hover:text-white"
+                >
+                  Delete order
+                </button>
+              </form>
+            ))
+          ) : (
+            <p className="text-sm text-stone-500">No orders to delete yet.</p>
+          )}
+        </div>
+      </Surface>
     </AppShell>
   );
 }

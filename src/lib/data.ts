@@ -5,197 +5,293 @@ import {
   manualExpenseCategories,
   manualExpenseCategoryLabels,
 } from "@/lib/constants";
-import { getDb } from "@/lib/db";
+import { getSupabase } from "@/lib/db";
 import type {
   DashboardData,
   Expense,
+  ExpenseBreakdown,
   ExpenseInsights,
+  OrderDetail,
+  OrderItem,
   OrderRow,
   Product,
   ScoopType,
   StockMovement,
 } from "@/lib/types";
 
-function getNumberResult(
-  query: string,
-  params: Array<string | number | bigint | null> = [],
-  field = "total",
-) {
-  const db = getDb();
-  const row = db.prepare(query).get(...params) as Record<string, number | null>;
+type OrderRecord = {
+  id: number;
+  customer_name: string;
+  customer_phone: string;
+  customer_address: string;
+  scoop_type_id: number | null;
+  scoop_name_snapshot: string;
+  scoop_price: number;
+  gift_count: number;
+  product_cost: number;
+  delivery_cost: number | null;
+  packaging_cost: number | null;
+  net_profit: number;
+  delivery_status: string;
+  payment_status: string;
+  ordered_at: string;
+  delivery_date: string | null;
+  created_at: string;
+  order_items: Array<{
+    id: number;
+    order_id: number;
+    product_id: number;
+    product_name_snapshot: string;
+    quantity: number;
+    unit_cost_snapshot: number;
+    line_cost: number;
+  }> | null;
+};
 
-  return Number(row[field] ?? 0);
+type StockMovementRecord = {
+  id: number;
+  quantity_delta: number;
+  reason: string;
+  note: string | null;
+  unit_cost_snapshot: number | null;
+  movement_value: number | null;
+  created_at: string;
+  products: { name: string } | { name: string }[] | null;
+};
+
+function unwrapData<T>(data: T | null, error: { message: string } | null, context: string) {
+  if (error) {
+    throw new Error(`${context}: ${error.message}`);
+  }
+
+  return data;
 }
 
-function getOrderSelectClause(limit?: number) {
-  return `
-    SELECT
-      orders.id,
-      orders.customer_name,
-      orders.customer_phone,
-      orders.customer_address,
-      orders.scoop_name_snapshot AS scoop_name,
-      orders.scoop_price,
-      orders.gift_count,
-      COALESCE(
-        GROUP_CONCAT(
-          order_items.product_name_snapshot || ' x' || order_items.quantity,
-          ', '
-        ),
-        'No gifts selected'
-      ) AS products_summary,
-      orders.product_cost,
-      orders.delivery_cost,
-      orders.packaging_cost,
-      orders.product_cost
-        + COALESCE(orders.delivery_cost, 0)
-        + COALESCE(orders.packaging_cost, 0) AS total_expense,
-      orders.net_profit,
-      orders.delivery_status,
-      orders.payment_status,
-      orders.ordered_at,
-      orders.delivery_date,
-      orders.created_at
-    FROM orders
-    LEFT JOIN order_items ON order_items.order_id = orders.id
-    GROUP BY orders.id
-    ORDER BY orders.ordered_at DESC, orders.id DESC
-    ${typeof limit === "number" ? `LIMIT ${limit}` : ""}
-  `;
+function toNumber(value: number | string | null | undefined) {
+  return Number(value ?? 0);
 }
 
-function getExpenseBreakdown() {
-  return manualExpenseCategories
+function mapOrderItems(items: OrderRecord["order_items"]): OrderItem[] {
+  return (items ?? []).map((item) => ({
+    id: Number(item.id),
+    order_id: Number(item.order_id),
+    product_id: Number(item.product_id),
+    product_name_snapshot: item.product_name_snapshot,
+    quantity: Number(item.quantity),
+    unit_cost_snapshot: toNumber(item.unit_cost_snapshot),
+    line_cost: toNumber(item.line_cost),
+  }));
+}
+
+function mapOrderRow(order: OrderRecord): OrderRow {
+  const items = mapOrderItems(order.order_items);
+
+  return {
+    id: Number(order.id),
+    customer_name: order.customer_name,
+    customer_phone: order.customer_phone,
+    customer_address: order.customer_address,
+    scoop_name: order.scoop_name_snapshot,
+    scoop_price: toNumber(order.scoop_price),
+    gift_count: Number(order.gift_count),
+    products_summary:
+      items.length > 0
+        ? items
+            .map((item) => `${item.product_name_snapshot} x${item.quantity}`)
+            .join(", ")
+        : "No gifts selected",
+    product_cost: toNumber(order.product_cost),
+    delivery_cost: order.delivery_cost === null ? null : toNumber(order.delivery_cost),
+    packaging_cost: order.packaging_cost === null ? null : toNumber(order.packaging_cost),
+    total_expense:
+      toNumber(order.product_cost) +
+      toNumber(order.delivery_cost) +
+      toNumber(order.packaging_cost),
+    net_profit: toNumber(order.net_profit),
+    delivery_status: order.delivery_status,
+    payment_status: order.payment_status,
+    ordered_at: order.ordered_at,
+    delivery_date: order.delivery_date,
+    created_at: order.created_at,
+  };
+}
+
+function mapOrderDetail(order: OrderRecord): OrderDetail {
+  return {
+    ...mapOrderRow(order),
+    scoop_type_id: order.scoop_type_id === null ? null : Number(order.scoop_type_id),
+    items: mapOrderItems(order.order_items),
+  };
+}
+
+function mapMovementProductName(record: StockMovementRecord) {
+  if (Array.isArray(record.products)) {
+    return record.products[0]?.name ?? "Unknown item";
+  }
+
+  return record.products?.name ?? "Unknown item";
+}
+
+async function getOrdersInternal(limit?: number) {
+  const supabase = getSupabase();
+  let query = supabase
+    .from("orders")
+    .select(
+      `
+        id,
+        customer_name,
+        customer_phone,
+        customer_address,
+        scoop_type_id,
+        scoop_name_snapshot,
+        scoop_price,
+        gift_count,
+        product_cost,
+        delivery_cost,
+        packaging_cost,
+        net_profit,
+        delivery_status,
+        payment_status,
+        ordered_at,
+        delivery_date,
+        created_at,
+        order_items (
+          id,
+          order_id,
+          product_id,
+          product_name_snapshot,
+          quantity,
+          unit_cost_snapshot,
+          line_cost
+        )
+      `,
+    )
+    .order("ordered_at", { ascending: false })
+    .order("id", { ascending: false });
+
+  if (typeof limit === "number") {
+    query = query.limit(limit);
+  }
+
+  const { data, error } = await query;
+
+  return unwrapData(data, error, "Unable to load orders") as OrderRecord[];
+}
+
+export async function getScoopTypes() {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("scoop_types")
+    .select("id, name, price, sort_order")
+    .order("sort_order", { ascending: true })
+    .order("id", { ascending: true });
+
+  return unwrapData(data, error, "Unable to load scoop types") as ScoopType[];
+}
+
+export async function getDashboardData(): Promise<DashboardData> {
+  const [orders, products, allExpenses, recentExpenses, stockRefills] = await Promise.all([
+    getOrdersInternal(6),
+    getProducts(),
+    getExpenses(),
+    getExpenses(6),
+    getRecentStockRefills(6),
+  ]);
+
+  const supabase = getSupabase();
+  const { data: allOrderData, error: allOrderError } = await supabase
+    .from("orders")
+    .select(
+      `
+        id,
+        customer_name,
+        customer_phone,
+        customer_address,
+        scoop_type_id,
+        scoop_name_snapshot,
+        scoop_price,
+        gift_count,
+        product_cost,
+        delivery_cost,
+        packaging_cost,
+        net_profit,
+        delivery_status,
+        payment_status,
+        ordered_at,
+        delivery_date,
+        created_at,
+        order_items (
+          id,
+          order_id,
+          product_id,
+          product_name_snapshot,
+          quantity,
+          unit_cost_snapshot,
+          line_cost
+        )
+      `,
+    )
+    .order("ordered_at", { ascending: false })
+    .order("id", { ascending: false });
+
+  const allOrders = unwrapData(
+    allOrderData,
+    allOrderError,
+    "Unable to load dashboard orders",
+  ) as OrderRecord[];
+
+  const recentOrders = orders.map(mapOrderRow);
+  const paidOrders = allOrders.filter((order) => order.payment_status === "paid");
+  const unpaidOrders = allOrders.filter((order) => order.payment_status !== "paid");
+  const lowStockItems = products.filter((product) => product.stock_quantity <= lowStockThreshold);
+
+  const expenseBreakdown: ExpenseBreakdown[] = manualExpenseCategories
     .map((category) => ({
       category: manualExpenseCategoryLabels[category],
-      total: getNumberResult(
-        "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE category = ?",
-        [category],
-      ),
+      total: allExpenses
+        .filter((expense) => expense.category === category)
+        .reduce((sum, expense) => sum + expense.amount, 0),
     }))
     .sort((left, right) => right.total - left.total);
-}
 
-function getRecentExpenses(limit = 6) {
-  const db = getDb();
-
-  return db
-    .prepare(
-      `
-        SELECT id, category, description, amount, spent_at, created_at
-        FROM expenses
-        ORDER BY spent_at DESC, id DESC
-        LIMIT ?
-      `,
-    )
-    .all(limit) as Expense[];
-}
-
-function getRecentStockRefills(limit = 6) {
-  const db = getDb();
-
-  return db
-    .prepare(
-      `
-        SELECT
-          stock_movements.id,
-          products.name AS product_name,
-          stock_movements.quantity_delta,
-          stock_movements.reason,
-          stock_movements.note,
-          stock_movements.unit_cost_snapshot,
-          stock_movements.movement_value,
-          stock_movements.created_at
-        FROM stock_movements
-        INNER JOIN products ON products.id = stock_movements.product_id
-        WHERE stock_movements.quantity_delta > 0
-        ORDER BY stock_movements.created_at DESC, stock_movements.id DESC
-        LIMIT ?
-      `,
-    )
-    .all(limit) as StockMovement[];
-}
-
-export function getScoopTypes() {
-  const db = getDb();
-
-  return db
-    .prepare(
-      `
-        SELECT id, name, price, sort_order
-        FROM scoop_types
-        ORDER BY sort_order ASC, id ASC
-      `,
-    )
-    .all() as ScoopType[];
-}
-
-export function getDashboardData(): DashboardData {
-  const db = getDb();
-  const cashIn = getNumberResult(
-    "SELECT COALESCE(SUM(scoop_price), 0) AS total FROM orders WHERE payment_status = 'paid'",
+  const cashIn = paidOrders.reduce((sum, order) => sum + toNumber(order.scoop_price), 0);
+  const cashOut = allExpenses.reduce((sum, expense) => sum + toNumber(expense.amount), 0);
+  const pendingCash = unpaidOrders.reduce((sum, order) => sum + toNumber(order.scoop_price), 0);
+  const totalProductCost = paidOrders.reduce(
+    (sum, order) => sum + toNumber(order.product_cost),
+    0,
   );
-  const cashOut = getNumberResult("SELECT COALESCE(SUM(amount), 0) AS total FROM expenses");
-  const pendingCash = getNumberResult(
-    "SELECT COALESCE(SUM(scoop_price), 0) AS total FROM orders WHERE payment_status != 'paid'",
+  const totalDeliveryCost = paidOrders.reduce(
+    (sum, order) => sum + toNumber(order.delivery_cost),
+    0,
   );
-  const totalOrders = getNumberResult("SELECT COUNT(*) AS total FROM orders");
-  const paidOrders = getNumberResult(
-    "SELECT COUNT(*) AS total FROM orders WHERE payment_status = 'paid'",
+  const totalPackagingCost = paidOrders.reduce(
+    (sum, order) => sum + toNumber(order.packaging_cost),
+    0,
   );
-  const unpaidOrders = totalOrders - paidOrders;
-  const totalProductCost = getNumberResult(
-    "SELECT COALESCE(SUM(product_cost), 0) AS total FROM orders WHERE payment_status = 'paid'",
+  const orderContributionProfit = paidOrders.reduce(
+    (sum, order) => sum + toNumber(order.net_profit),
+    0,
   );
-  const totalDeliveryCost = getNumberResult(
-    "SELECT COALESCE(SUM(COALESCE(delivery_cost, 0)), 0) AS total FROM orders WHERE payment_status = 'paid'",
+  const inventoryPurchases = allExpenses
+    .filter((expense) => expense.category === "INVENTORY_PURCHASE")
+    .reduce((sum, expense) => sum + expense.amount, 0);
+  const metaAdsSpend = allExpenses
+    .filter((expense) => expense.category === "META_ADS")
+    .reduce((sum, expense) => sum + expense.amount, 0);
+  const packagingPurchases = allExpenses
+    .filter((expense) => expense.category === "PACKAGING_PURCHASE")
+    .reduce((sum, expense) => sum + expense.amount, 0);
+  const miscExpenses = allExpenses
+    .filter((expense) => expense.category === "MISC")
+    .reduce((sum, expense) => sum + expense.amount, 0);
+  const inventoryUsed = allOrders.reduce(
+    (sum, order) => sum + toNumber(order.product_cost),
+    0,
   );
-  const totalPackagingCost = getNumberResult(
-    "SELECT COALESCE(SUM(COALESCE(packaging_cost, 0)), 0) AS total FROM orders WHERE payment_status = 'paid'",
-  );
-  const orderContributionProfit = getNumberResult(
-    "SELECT COALESCE(SUM(net_profit), 0) AS total FROM orders WHERE payment_status = 'paid'",
-  );
-  const inventoryPurchases = getNumberResult(
-    "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE category = 'INVENTORY_PURCHASE'",
-  );
-  const metaAdsSpend = getNumberResult(
-    "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE category = 'META_ADS'",
-  );
-  const packagingPurchases = getNumberResult(
-    "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE category = 'PACKAGING_PURCHASE'",
-  );
-  const miscExpenses = getNumberResult(
-    "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE category = 'MISC'",
-  );
-  const inventoryUsed = getNumberResult(
-    "SELECT COALESCE(SUM(product_cost), 0) AS total FROM orders",
-  );
-  const inventoryLeftValue = getNumberResult(
-    "SELECT COALESCE(SUM(stock_quantity * unit_cost), 0) AS total FROM products",
-  );
-
-  const lowStockItems = db
-    .prepare(
-      `
-        SELECT id, name, category, stock_quantity, unit_cost, created_at, updated_at
-        FROM products
-        WHERE stock_quantity <= ?
-        ORDER BY stock_quantity ASC, name ASC
-      `,
-    )
-    .all(lowStockThreshold) as Product[];
-
-  const recentOrders = db.prepare(getOrderSelectClause(6)).all() as OrderRow[];
-  const recentExpenses = getRecentExpenses(6);
-  const recentStockRefills = getRecentStockRefills(6);
-  const expenseBreakdown = getExpenseBreakdown();
-
-  const pendingOrders = getNumberResult(
-    "SELECT COUNT(*) AS total FROM orders WHERE delivery_status = 'pending'",
-  );
-  const deliveringOrders = getNumberResult(
-    "SELECT COUNT(*) AS total FROM orders WHERE delivery_status = 'delivering'",
+  const inventoryLeftValue = products.reduce(
+    (sum, product) => sum + product.stock_quantity * product.unit_cost,
+    0,
   );
 
   return {
@@ -205,9 +301,9 @@ export function getDashboardData(): DashboardData {
       cashLeft: cashIn - cashOut,
       pendingCash,
       grossSales: cashIn,
-      totalOrders,
-      paidOrders,
-      unpaidOrders,
+      totalOrders: allOrders.length,
+      paidOrders: paidOrders.length,
+      unpaidOrders: unpaidOrders.length,
       totalProductCost,
       totalDeliveryCost,
       totalPackagingCost,
@@ -221,63 +317,145 @@ export function getDashboardData(): DashboardData {
       inventoryUsed,
       inventoryLeftValue,
       lowStockCount: lowStockItems.length,
-      pendingOrders,
-      deliveringOrders,
+      pendingOrders: allOrders.filter((order) => order.delivery_status === "pending").length,
+      deliveringOrders: allOrders.filter((order) => order.delivery_status === "delivering")
+        .length,
     },
     lowStockItems,
     recentOrders,
     recentExpenses,
-    recentStockRefills,
+    recentStockRefills: stockRefills,
     expenseBreakdown,
   };
 }
 
-export function getProducts() {
-  const db = getDb();
+export async function getProducts(): Promise<Product[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, name, category, stock_quantity, unit_cost, created_at, updated_at")
+    .order("name", { ascending: true })
+    .order("id", { ascending: true });
 
-  return db
-    .prepare(
+  return (unwrapData(data, error, "Unable to load products") as Product[]).map((product) => ({
+    ...product,
+    id: Number(product.id),
+    stock_quantity: Number(product.stock_quantity),
+    unit_cost: toNumber(product.unit_cost),
+  }));
+}
+
+export async function getProductById(productId: number): Promise<Product | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, name, category, stock_quantity, unit_cost, created_at, updated_at")
+    .eq("id", productId)
+    .maybeSingle();
+
+  const product = unwrapData(data, error, "Unable to load product");
+
+  if (!product) {
+    return null;
+  }
+
+  return {
+    ...product,
+    id: Number(product.id),
+    stock_quantity: Number(product.stock_quantity),
+    unit_cost: toNumber(product.unit_cost),
+  } as Product;
+}
+
+export async function getStockMovements(): Promise<StockMovement[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("stock_movements")
+    .select(
       `
-        SELECT id, name, category, stock_quantity, unit_cost, created_at, updated_at
-        FROM products
-        ORDER BY name ASC, id ASC
+        id,
+        quantity_delta,
+        reason,
+        note,
+        unit_cost_snapshot,
+        movement_value,
+        created_at,
+        products ( name )
       `,
     )
-    .all() as Product[];
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(12);
+
+  const rows = unwrapData(
+    data,
+    error,
+    "Unable to load stock movements",
+  ) as StockMovementRecord[];
+
+  return rows.map((movement) => ({
+    id: Number(movement.id),
+    product_name: mapMovementProductName(movement),
+    quantity_delta: Number(movement.quantity_delta),
+    reason: movement.reason,
+    note: movement.note,
+    unit_cost_snapshot:
+      movement.unit_cost_snapshot === null ? null : toNumber(movement.unit_cost_snapshot),
+    movement_value: movement.movement_value === null ? null : toNumber(movement.movement_value),
+    created_at: movement.created_at,
+  }));
 }
 
-export function getStockMovements() {
-  const db = getDb();
+export async function getOrders(): Promise<OrderRow[]> {
+  const orders = await getOrdersInternal();
 
-  return db
-    .prepare(
+  return orders.map(mapOrderRow);
+}
+
+export async function getOrderById(orderId: number): Promise<OrderDetail | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("orders")
+    .select(
       `
-        SELECT
-          stock_movements.id,
-          products.name AS product_name,
-          stock_movements.quantity_delta,
-          stock_movements.reason,
-          stock_movements.note,
-          stock_movements.unit_cost_snapshot,
-          stock_movements.movement_value,
-          stock_movements.created_at
-        FROM stock_movements
-        INNER JOIN products ON products.id = stock_movements.product_id
-        ORDER BY stock_movements.created_at DESC, stock_movements.id DESC
-        LIMIT 12
+        id,
+        customer_name,
+        customer_phone,
+        customer_address,
+        scoop_type_id,
+        scoop_name_snapshot,
+        scoop_price,
+        gift_count,
+        product_cost,
+        delivery_cost,
+        packaging_cost,
+        net_profit,
+        delivery_status,
+        payment_status,
+        ordered_at,
+        delivery_date,
+        created_at,
+        order_items (
+          id,
+          order_id,
+          product_id,
+          product_name_snapshot,
+          quantity,
+          unit_cost_snapshot,
+          line_cost
+        )
       `,
     )
-    .all() as StockMovement[];
+    .eq("id", orderId)
+    .maybeSingle();
+
+  const order = unwrapData(data, error, "Unable to load order") as OrderRecord | null;
+
+  return order ? mapOrderDetail(order) : null;
 }
 
-export function getOrders() {
-  const db = getDb();
-
-  return db.prepare(getOrderSelectClause()).all() as OrderRow[];
-}
-
-export function getExpenseInsights(): ExpenseInsights {
-  const dashboard = getDashboardData();
+export async function getExpenseInsights(): Promise<ExpenseInsights> {
+  const dashboard = await getDashboardData();
   const nonZeroBreakdown = dashboard.expenseBreakdown.filter((item) => item.total > 0);
 
   return {
@@ -302,4 +480,65 @@ export function getExpenseInsights(): ExpenseInsights {
     recentOrders: dashboard.recentOrders,
     recentStockRefills: dashboard.recentStockRefills,
   };
+}
+
+async function getExpenses(limit?: number): Promise<Expense[]> {
+  const supabase = getSupabase();
+  let query = supabase
+    .from("expenses")
+    .select("id, category, description, amount, spent_at, created_at")
+    .order("spent_at", { ascending: false })
+    .order("id", { ascending: false });
+
+  if (typeof limit === "number") {
+    query = query.limit(limit);
+  }
+
+  const { data, error } = await query;
+
+  return (unwrapData(data, error, "Unable to load expenses") as Expense[]).map((expense) => ({
+    ...expense,
+    id: Number(expense.id),
+    amount: toNumber(expense.amount),
+  }));
+}
+
+async function getRecentStockRefills(limit: number): Promise<StockMovement[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("stock_movements")
+    .select(
+      `
+        id,
+        quantity_delta,
+        reason,
+        note,
+        unit_cost_snapshot,
+        movement_value,
+        created_at,
+        products ( name )
+      `,
+    )
+    .gt("quantity_delta", 0)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit);
+
+  const rows = unwrapData(
+    data,
+    error,
+    "Unable to load recent stock refills",
+  ) as StockMovementRecord[];
+
+  return rows.map((movement) => ({
+    id: Number(movement.id),
+    product_name: mapMovementProductName(movement),
+    quantity_delta: Number(movement.quantity_delta),
+    reason: movement.reason,
+    note: movement.note,
+    unit_cost_snapshot:
+      movement.unit_cost_snapshot === null ? null : toNumber(movement.unit_cost_snapshot),
+    movement_value: movement.movement_value === null ? null : toNumber(movement.movement_value),
+    created_at: movement.created_at,
+  }));
 }

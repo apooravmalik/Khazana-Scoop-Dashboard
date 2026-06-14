@@ -12,7 +12,7 @@ const initialState: QueryActionState = {
   error: "",
   message: "",
   rows: [],
-  sql: "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;",
+  sql: "-- Paste docs/supabase/schema.sql into the Supabase SQL Editor.",
 };
 
 export function QueryTester() {
@@ -42,7 +42,7 @@ export function QueryTester() {
             {pending ? "Running..." : "Run query"}
           </button>
           <p className="text-xs uppercase tracking-[0.24em] text-stone-500">
-            Local SQLite access only
+            Use Supabase SQL Editor
           </p>
         </div>
       </form>
@@ -96,7 +96,7 @@ export function QueryTester() {
               ) : (
                 <tr>
                   <td className="px-4 py-6 text-stone-500">
-                    Query results will appear here.
+                    This app no longer runs raw SQL directly. Use the Supabase dashboard for SQL.
                   </td>
                 </tr>
               )}

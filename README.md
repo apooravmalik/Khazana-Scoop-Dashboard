@@ -1,12 +1,12 @@
 # Khaza-Scoop Dashboard
 
-Khaza-Scoop is a local-first business dashboard for a mystery scoop Instagram shopping business. It centralizes gift inventory, scoop-based orders, connected costs, and KPI visibility in one Next.js app backed by SQLite.
+Khaza-Scoop is a business dashboard for a mystery scoop Instagram shopping business. It centralizes gift inventory, scoop-based orders, connected costs, and KPI visibility in one Next.js app backed by Supabase.
 
 ## Stack
 
 - Next.js App Router
 - Tailwind CSS
-- SQLite via `better-sqlite3`
+- Supabase
 - Server Actions for writes
 
 ## Features
@@ -16,7 +16,7 @@ Khaza-Scoop is a local-first business dashboard for a mystery scoop Instagram sh
 - Stock page for gift inventory management, stock refills, and editable scoop pricing
 - Orders page with customer details, scoop selection, gift checklist, automatic stock deduction, and saved profit snapshots
 - Expenses page for connected cost analytics across gift cost, delivery cost, and packaging cost
-- Local SQL query tester for database inspection
+- Supabase setup helper with SQL Editor guidance
 
 ## Local Setup
 
@@ -49,8 +49,11 @@ Override these values in `.env.local` for your own local setup.
 
 ## Database
 
-- SQLite file: `data/khaza-scoop.db`
-- The schema is initialized automatically on first app load
+- Supabase project URL: configure via `NEXT_PUBLIC_SUPABASE_URL`
+- Publishable key: configure via `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- Schema file: [supabase/schema.sql](/Users/yankitrajor/Desktop/Apoorav/Personal/Khazana-Scoop/supabase/schema.sql)
+
+Run the schema file once in the Supabase SQL Editor before using the app.
 
 ## Useful Commands
 

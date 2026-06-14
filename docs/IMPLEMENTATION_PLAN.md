@@ -2,7 +2,7 @@
 
 ## Product Scope
 
-Khaza-Scoop is a local-first business dashboard for an Instagram shopping business. The app focuses on four operational areas:
+Khaza-Scoop is a business dashboard for an Instagram shopping business. The app focuses on four operational areas:
 
 1. Login and owner access
 2. Financial snapshot dashboard
@@ -14,7 +14,7 @@ Khaza-Scoop is a local-first business dashboard for an Instagram shopping busine
 ### Phase 1: Foundation
 
 - Scaffold a Next.js App Router project with Tailwind CSS
-- Add SQLite storage using `better-sqlite3`
+- Add a hosted Supabase data layer
 - Establish a local auth flow with cookie-based sessions
 - Define the core database schema for products, scoop prices, multi-item orders, and stock movements
 
@@ -31,7 +31,7 @@ Status: Complete
 
 ### Phase 3: Admin Utilities
 
-- Add a local SQL query tester for fast debugging and inspection
+- Add a Supabase setup helper page and SQL schema file
 - Add setup documentation and a practical architecture overview
 - Verify linting and production build readiness
 
@@ -39,6 +39,6 @@ Status: Complete
 
 ## Delivery Notes
 
-- SQLite data is stored locally in `data/khaza-scoop.db`
+- Supabase schema setup lives in `supabase/schema.sql`
 - Authentication is intentionally lightweight for local owner use
-- The query tester supports direct SQL access, so it is meant for trusted local use only
+- Raw SQL should be run in the Supabase SQL Editor, not from inside the app

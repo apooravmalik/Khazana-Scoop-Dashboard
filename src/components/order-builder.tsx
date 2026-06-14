@@ -9,17 +9,53 @@ import type { Product, ScoopType } from "@/lib/types";
 type OrderBuilderProps = {
   products: Product[];
   scoopTypes: ScoopType[];
+  initialOrder?: {
+    customer_name: string;
+    customer_phone: string;
+    customer_address: string;
+    scoop_type_id: number | null;
+    ordered_at: string;
+    delivery_status: string;
+    payment_status: string;
+    delivery_cost: number | null;
+    packaging_cost: number | null;
+    delivery_date: string | null;
+    items: Array<{ product_id: number; quantity: number }>;
+  };
+  submitLabel?: string;
 };
 
 type SelectedState = Record<number, { checked: boolean; quantity: number }>;
+type InitialSelectedItem = { product_id: number; quantity: number };
 
 function getTodayDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function OrderBuilder({ products, scoopTypes }: OrderBuilderProps) {
-  const [selectedScoopId, setSelectedScoopId] = useState(String(scoopTypes[0]?.id ?? ""));
-  const [selected, setSelected] = useState<SelectedState>({});
+function buildInitialSelectedState(items: InitialSelectedItem[]) {
+  return Object.fromEntries(
+    (items ?? []).map((item) => [
+      item.product_id,
+      {
+        checked: true,
+        quantity: item.quantity,
+      },
+    ]),
+  ) as SelectedState;
+}
+
+export function OrderBuilder({
+  products,
+  scoopTypes,
+  initialOrder,
+  submitLabel = "Save order",
+}: OrderBuilderProps) {
+  const [selectedScoopId, setSelectedScoopId] = useState(
+    String(initialOrder?.scoop_type_id ?? scoopTypes[0]?.id ?? ""),
+  );
+  const [selected, setSelected] = useState<SelectedState>(
+    buildInitialSelectedState(initialOrder?.items ?? []),
+  );
 
   const activeScoop = scoopTypes.find((scoopType) => String(scoopType.id) === selectedScoopId);
 
@@ -53,6 +89,7 @@ export function OrderBuilder({ products, scoopTypes }: OrderBuilderProps) {
           <input
             type="text"
             name="customer_name"
+            defaultValue={initialOrder?.customer_name ?? ""}
             className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
             placeholder="Anaya"
             required
@@ -66,6 +103,7 @@ export function OrderBuilder({ products, scoopTypes }: OrderBuilderProps) {
           <input
             type="tel"
             name="customer_phone"
+            defaultValue={initialOrder?.customer_phone ?? ""}
             className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
             placeholder="+91 98xxxxxx12"
             required
@@ -80,14 +118,15 @@ export function OrderBuilder({ products, scoopTypes }: OrderBuilderProps) {
         <textarea
           name="customer_address"
           rows={4}
+          defaultValue={initialOrder?.customer_address ?? ""}
           className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
           placeholder="Full shipping address"
           required
         />
       </label>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <label className="block md:col-span-2">
+      <div className="grid gap-4 lg:grid-cols-4">
+        <label className="block lg:col-span-2">
           <span className="mb-2 block text-sm font-medium text-stone-700">
             Scoop selection
           </span>
@@ -113,7 +152,7 @@ export function OrderBuilder({ products, scoopTypes }: OrderBuilderProps) {
           <input
             type="date"
             name="ordered_at"
-            defaultValue={getTodayDate()}
+            defaultValue={initialOrder?.ordered_at ?? getTodayDate()}
             className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
             required
           />
@@ -125,7 +164,7 @@ export function OrderBuilder({ products, scoopTypes }: OrderBuilderProps) {
           </span>
           <select
             name="delivery_status"
-            defaultValue="pending"
+            defaultValue={initialOrder?.delivery_status ?? "pending"}
             className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
           >
             {orderStatuses.map((status) => (
@@ -175,7 +214,7 @@ export function OrderBuilder({ products, scoopTypes }: OrderBuilderProps) {
           </p>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 xl:grid-cols-2">
           {products.map((product) => {
             const entry = selected[product.id];
             const checked = entry?.checked ?? false;
@@ -246,14 +285,14 @@ export function OrderBuilder({ products, scoopTypes }: OrderBuilderProps) {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         <label className="block">
           <span className="mb-2 block text-sm font-medium text-stone-700">
             Payment status
           </span>
           <select
             name="payment_status"
-            defaultValue="unpaid"
+            defaultValue={initialOrder?.payment_status ?? "unpaid"}
             className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
           >
             {paymentStatuses.map((status) => (
@@ -262,6 +301,48 @@ export function OrderBuilder({ products, scoopTypes }: OrderBuilderProps) {
               </option>
             ))}
           </select>
+        </label>
+
+        <label className="block">
+          <span className="mb-2 block text-sm font-medium text-stone-700">
+            Delivery cost
+          </span>
+          <input
+            type="number"
+            name="delivery_cost"
+            min="0"
+            step="0.01"
+            defaultValue={initialOrder?.delivery_cost ?? ""}
+            placeholder="Leave empty for now"
+            className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
+          />
+        </label>
+
+        <label className="block">
+          <span className="mb-2 block text-sm font-medium text-stone-700">
+            Packaging cost
+          </span>
+          <input
+            type="number"
+            name="packaging_cost"
+            min="0"
+            step="0.01"
+            defaultValue={initialOrder?.packaging_cost ?? ""}
+            placeholder="Leave empty for now"
+            className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
+          />
+        </label>
+
+        <label className="block">
+          <span className="mb-2 block text-sm font-medium text-stone-700">
+            Delivery date
+          </span>
+          <input
+            type="date"
+            name="delivery_date"
+            defaultValue={initialOrder?.delivery_date ?? ""}
+            className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
+          />
         </label>
 
         <div className="flex items-end">
@@ -279,7 +360,7 @@ export function OrderBuilder({ products, scoopTypes }: OrderBuilderProps) {
             type="submit"
             className="inline-flex w-full items-center justify-center rounded-full bg-stone-950 px-5 py-3 text-sm font-semibold text-stone-50 transition hover:bg-stone-800"
           >
-            Save order
+            {submitLabel}
           </button>
         </div>
       </div>

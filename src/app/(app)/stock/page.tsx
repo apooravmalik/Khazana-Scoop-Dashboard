@@ -1,12 +1,14 @@
 import {
   adjustStockAction,
   createProductAction,
+  deleteProductAction,
   updateScoopPricesAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { Surface } from "@/components/surface";
 import { getProducts, getScoopTypes, getStockMovements } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/format";
+import Link from "next/link";
 
 type StockPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -18,9 +20,11 @@ function formatError(error: string) {
 
 export default async function StockPage({ searchParams }: StockPageProps) {
   const params = await searchParams;
-  const products = getProducts();
-  const movements = getStockMovements();
-  const scoopTypes = getScoopTypes();
+  const [products, movements, scoopTypes] = await Promise.all([
+    getProducts(),
+    getStockMovements(),
+    getScoopTypes(),
+  ]);
 
   return (
     <AppShell
@@ -241,7 +245,7 @@ export default async function StockPage({ searchParams }: StockPageProps) {
               <table className="min-w-full divide-y divide-stone-200 text-left text-sm">
                 <thead className="bg-stone-100/80">
                   <tr>
-                    {["Product", "Category", "Quantity", "Cost", "Stock value"].map(
+                    {["Product", "Category", "Quantity", "Cost", "Stock value", "Actions"].map(
                       (heading) => (
                         <th
                           key={heading}
@@ -270,11 +274,30 @@ export default async function StockPage({ searchParams }: StockPageProps) {
                         <td className="px-4 py-4 text-stone-700">
                           {formatCurrency(product.unit_cost * product.stock_quantity)}
                         </td>
+                        <td className="px-4 py-4">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Link
+                              href={`/stock/${product.id}`}
+                              className="inline-flex rounded-full border border-stone-300 px-3 py-1.5 text-xs font-semibold text-stone-700 transition hover:border-stone-950 hover:text-stone-950"
+                            >
+                              Edit
+                            </Link>
+                            <form action={deleteProductAction}>
+                              <input type="hidden" name="product_id" value={product.id} />
+                              <button
+                                type="submit"
+                                className="inline-flex rounded-full border border-rose-300 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:border-rose-600 hover:bg-rose-600 hover:text-white"
+                              >
+                                Delete
+                              </button>
+                            </form>
+                          </div>
+                        </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td className="px-4 py-6 text-stone-500" colSpan={5}>
+                      <td className="px-4 py-6 text-stone-500" colSpan={6}>
                         No inventory items yet. Add the first gift item above.
                       </td>
                     </tr>

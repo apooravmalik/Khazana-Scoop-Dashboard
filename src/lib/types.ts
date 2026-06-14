@@ -36,6 +36,11 @@ export type OrderItem = {
   line_cost: number;
 };
 
+export type OrderDetail = OrderRow & {
+  scoop_type_id: number | null;
+  items: OrderItem[];
+};
+
 export type OrderRow = {
   id: number;
   customer_name: string;

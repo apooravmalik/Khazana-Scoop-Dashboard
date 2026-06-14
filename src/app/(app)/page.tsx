@@ -6,7 +6,7 @@ import { manualExpenseCategoryLabels } from "@/lib/constants";
 import { getDashboardData } from "@/lib/data";
 import { formatCount, formatCurrency, formatDate } from "@/lib/format";
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
   const {
     expenseBreakdown,
     lowStockItems,
@@ -14,7 +14,7 @@ export default function DashboardPage() {
     recentExpenses,
     recentOrders,
     recentStockRefills,
-  } = getDashboardData();
+  } = await getDashboardData();
 
   return (
     <AppShell

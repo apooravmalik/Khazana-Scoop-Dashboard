@@ -1,10 +1,10 @@
-# Khaza-Scoop Page Logic And SQLite Model
+# Khaza-Scoop Page Logic And Supabase Model
 
 This document explains:
 
 1. Every page in the dashboard
 2. The business logic behind each page
-3. How data is stored in SQLite
+3. How data is stored in Supabase
 4. How the pages connect to each other
 
 ## Product Summary
@@ -33,7 +33,7 @@ The owner workflow is:
 - `/expenses`
 - `/query-tester`
 
-## SQLite Database Diagram
+## Supabase Database Diagram
 
 ```mermaid
 erDiagram
@@ -55,9 +55,7 @@ erDiagram
         string sku
         string category
         int stock_quantity
-        int reorder_point
         float unit_cost
-        float selling_price
         string created_at
         string updated_at
     }
@@ -107,7 +105,7 @@ erDiagram
 
 ## Important Schema Note
 
-The `products` table still contains `sku`, `reorder_point`, and `selling_price` columns for backward compatibility with earlier data, but the current business flow does **not** depend on them.
+The `products` table contains `sku` as a stable internal identifier, but the business workflow mainly depends on item name, category, quantity, and cost.
 
 The current live logic uses:
 
@@ -601,23 +599,21 @@ Route: `/query-tester`
 
 ### Purpose
 
-A local admin/debugging tool for direct SQLite access.
+A helper page that points the owner to the Supabase SQL Editor for schema setup and custom SQL.
 
 ### What it does
 
-- Runs `SELECT`
-- Runs `INSERT`
-- Runs `UPDATE`
-- Runs `DELETE`
-- Runs SQL scripts such as schema inspection or manual fixes
+- Shows the active Supabase project URL
+- Reminds the owner to run `supabase/schema.sql` in the Supabase SQL Editor
+- Keeps SQL setup guidance inside the app
 
 ### Important rule
 
-This page is for trusted local use only because it can bypass normal app flows.
+Raw SQL should be run in the Supabase dashboard, not from inside this app.
 
 ### Database impact
 
-- Directly depends on the SQL entered by the owner
+- None by itself
 
 ## Cross-Page Business Logic
 

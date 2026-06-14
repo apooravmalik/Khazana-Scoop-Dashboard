@@ -19,7 +19,7 @@ function formatError(error: string) {
 
 export default async function ExpensesPage({ searchParams }: ExpensesPageProps) {
   const params = await searchParams;
-  const insights = getExpenseInsights();
+  const insights = await getExpenseInsights();
 
   return (
     <AppShell
