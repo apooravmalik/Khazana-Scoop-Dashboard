@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { SubmitButton } from "@/components/submit-button";
 import { orderStatuses, paymentStatuses } from "@/lib/constants";
 import { formatCurrency } from "@/lib/format";
 import type { Product, ScoopType } from "@/lib/types";
@@ -356,12 +357,12 @@ export function OrderBuilder({
               })),
             )}
           />
-          <button
-            type="submit"
+          <SubmitButton
+            pendingLabel="Saving order..."
             className="inline-flex w-full items-center justify-center rounded-full bg-stone-950 px-5 py-3 text-sm font-semibold text-stone-50 transition hover:bg-stone-800"
           >
             {submitLabel}
-          </button>
+          </SubmitButton>
         </div>
       </div>
     </div>

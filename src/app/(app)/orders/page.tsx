@@ -7,7 +7,9 @@ import {
 } from "@/app/actions";
 import { OrderBuilder } from "@/components/order-builder";
 import { AppShell } from "@/components/app-shell";
+import { ModalLauncher } from "@/components/modal-launcher";
 import { StatusPill } from "@/components/status-pill";
+import { SubmitButton } from "@/components/submit-button";
 import { Surface } from "@/components/surface";
 import { getOrders, getProducts, getScoopTypes } from "@/lib/data";
 import { orderStatuses, paymentStatuses } from "@/lib/constants";
@@ -80,12 +82,32 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
       <section className="grid gap-6 2xl:grid-cols-[0.95fr_1.05fr]">
         <Surface
           title="Create a new order"
-          description="Flow: customer details, scoop selection, gift checklist, then an automatic stock and profit snapshot."
+          description="Open a focused order form instead of filling the full checklist inline while reviewing the tracker."
         >
           {products.length > 0 && scoopTypes.length > 0 ? (
-            <form action={createOrderAction} className="grid gap-4">
-              <OrderBuilder products={products} scoopTypes={scoopTypes} />
-            </form>
+            <div className="space-y-4">
+              <p className="text-sm leading-6 text-stone-600">
+                Use the modal flow for customer details, scoop selection, gift checklist, and the
+                first profit snapshot. This helps prevent accidental repeat submissions while the
+                page is still saving.
+              </p>
+              <div className="grid gap-3 rounded-[1.25rem] border border-stone-200 bg-stone-50/70 p-4 text-sm text-stone-600 sm:grid-cols-2">
+                <p>1. Add customer info and choose the scoop size.</p>
+                <p>2. Tick the gifts unlocked by the mystery scoop beads.</p>
+                <p>3. Save once and let stock reduce automatically.</p>
+                <p>4. Add delivery and packaging later from the tracker if needed.</p>
+              </div>
+              <ModalLauncher
+                title="Create a new order"
+                description="Customer details, scoop selection, gift checklist, then an automatic stock and profit snapshot."
+                triggerLabel="Create order"
+                triggerClassName="inline-flex items-center rounded-full bg-stone-950 px-5 py-3 text-sm font-semibold text-stone-50 transition hover:bg-stone-800"
+              >
+                <form action={createOrderAction} className="grid gap-4">
+                  <OrderBuilder products={products} scoopTypes={scoopTypes} />
+                </form>
+              </ModalLauncher>
+            </div>
           ) : (
             <div className="rounded-[1.25rem] border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-stone-700">
               <p className="font-semibold text-stone-900">
@@ -284,12 +306,41 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
                       >
                         Edit details
                       </Link>
-                      <button
-                        type="submit"
+                      <SubmitButton
+                        pendingLabel="Updating..."
                         className="inline-flex items-center rounded-full border border-stone-950 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-stone-950 hover:text-stone-50"
                       >
                         Quick update
-                      </button>
+                      </SubmitButton>
+                      <ModalLauncher
+                        title={`Delete order #${order.id}`}
+                        description="Deleting an order restores the selected gifts back to stock and removes the saved order record."
+                        triggerLabel="Delete"
+                        panelClassName="max-w-xl"
+                        triggerClassName="inline-flex items-center rounded-full border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:border-rose-600 hover:bg-rose-600 hover:text-white"
+                      >
+                        <form action={deleteOrderAction} className="space-y-4">
+                          <input type="hidden" name="order_id" value={order.id} />
+                          <div className="rounded-[1.25rem] border border-rose-200 bg-rose-50 px-4 py-4 text-sm leading-6 text-rose-800">
+                            Delete the order for{" "}
+                            <span className="font-semibold">{order.customer_name}</span> only if
+                            it was entered by mistake or should be fully removed
+                            from reporting.
+                          </div>
+                          <div className="rounded-[1.25rem] border border-stone-200 bg-stone-50/70 px-4 py-4 text-sm leading-6 text-stone-600">
+                            <p className="font-semibold text-stone-900">
+                              #{order.id} · {order.scoop_name}
+                            </p>
+                            <p className="mt-1">{order.products_summary}</p>
+                          </div>
+                          <SubmitButton
+                            pendingLabel="Deleting order..."
+                            className="inline-flex rounded-full border border-rose-300 px-4 py-2 font-semibold text-rose-700 transition hover:border-rose-600 hover:bg-rose-600 hover:text-white"
+                          >
+                            Delete order
+                          </SubmitButton>
+                        </form>
+                      </ModalLauncher>
                     </div>
                   </div>
                 </form>
@@ -303,40 +354,6 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
         </Surface>
       </section>
 
-      <Surface
-        title="Delete an order"
-        description="Deleting an order restores the selected gifts back to stock and removes the order record."
-      >
-        <div className="space-y-3">
-          {orders.length > 0 ? (
-            orders.map((order) => (
-              <form
-                key={`delete-${order.id}`}
-                action={deleteOrderAction}
-                className="flex flex-col gap-3 rounded-[1.25rem] border border-stone-200 bg-stone-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <input type="hidden" name="order_id" value={order.id} />
-                <div>
-                  <p className="font-semibold text-stone-900">
-                    #{order.id} · {order.customer_name}
-                  </p>
-                  <p className="mt-1 text-sm text-stone-600">
-                    {order.scoop_name} · {order.products_summary}
-                  </p>
-                </div>
-                <button
-                  type="submit"
-                  className="inline-flex items-center rounded-full border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:border-rose-600 hover:bg-rose-600 hover:text-white"
-                >
-                  Delete order
-                </button>
-              </form>
-            ))
-          ) : (
-            <p className="text-sm text-stone-500">No orders to delete yet.</p>
-          )}
-        </div>
-      </Surface>
     </AppShell>
   );
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { deleteProductAction, updateProductAction } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
+import { SubmitButton } from "@/components/submit-button";
 import { Surface } from "@/components/surface";
 import { getProductById } from "@/lib/data";
 import { formatCurrency } from "@/lib/format";
@@ -93,12 +94,12 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="submit"
+              <SubmitButton
+                pendingLabel="Saving item..."
                 className="inline-flex rounded-full bg-stone-950 px-5 py-3 text-sm font-semibold text-stone-50 transition hover:bg-stone-800"
               >
                 Save item changes
-              </button>
+              </SubmitButton>
               <Link
                 href="/stock"
                 className="inline-flex rounded-full border border-stone-300 px-4 py-3 text-sm font-semibold text-stone-700 transition hover:border-stone-950 hover:text-stone-950"
@@ -119,12 +120,12 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
               If this item has already been used in orders or stock movements, the app will block
               deletion to protect reporting history.
             </div>
-            <button
-              type="submit"
+            <SubmitButton
+              pendingLabel="Deleting item..."
               className="inline-flex rounded-full border border-rose-300 px-4 py-2 font-semibold text-rose-700 transition hover:border-rose-600 hover:bg-rose-600 hover:text-white"
             >
               Delete item
-            </button>
+            </SubmitButton>
           </form>
         </Surface>
       </section>

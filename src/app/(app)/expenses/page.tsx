@@ -1,6 +1,7 @@
 import { createExpenseAction } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
+import { SubmitButton } from "@/components/submit-button";
 import { Surface } from "@/components/surface";
 import {
   manualExpenseCategories,
@@ -102,12 +103,12 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
             </div>
 
             <div>
-              <button
-                type="submit"
+              <SubmitButton
+                pendingLabel="Saving expense..."
                 className="inline-flex items-center rounded-full bg-stone-950 px-5 py-3 text-sm font-semibold text-stone-50 transition hover:bg-stone-800"
               >
                 Save expense
-              </button>
+              </SubmitButton>
             </div>
           </form>
         </Surface>

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { logoutAction } from "@/app/actions";
 import { getDefaultCredentials } from "@/lib/auth";
 
+import { SubmitButton } from "./submit-button";
 import { SidebarPanel } from "./sidebar-panel";
 
 type AppShellProps = {
@@ -36,12 +37,12 @@ export function AppShell({ children, description, title }: AppShellProps) {
                 </div>
 
                 <form action={logoutAction}>
-                  <button
-                    type="submit"
+                  <SubmitButton
+                    pendingLabel="Logging out..."
                     className="inline-flex items-center rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 transition hover:border-stone-900 hover:text-stone-950"
                   >
                     Logout
-                  </button>
+                  </SubmitButton>
                 </form>
               </div>
             </header>

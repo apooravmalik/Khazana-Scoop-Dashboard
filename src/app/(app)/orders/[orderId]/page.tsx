@@ -3,6 +3,7 @@ import Link from "next/link";
 import { deleteOrderAction, updateOrderAction } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { OrderBuilder } from "@/components/order-builder";
+import { SubmitButton } from "@/components/submit-button";
 import { Surface } from "@/components/surface";
 import { getOrderById, getProducts, getScoopTypes } from "@/lib/data";
 
@@ -97,12 +98,12 @@ export default async function EditOrderPage({
               Delete this only if the order was entered by mistake or should be fully removed
               from business reporting.
             </div>
-            <button
-              type="submit"
+            <SubmitButton
+              pendingLabel="Deleting order..."
               className="inline-flex rounded-full border border-rose-300 px-4 py-2 font-semibold text-rose-700 transition hover:border-rose-600 hover:bg-rose-600 hover:text-white"
             >
               Delete order
-            </button>
+            </SubmitButton>
           </form>
 
           <div className="mt-6">

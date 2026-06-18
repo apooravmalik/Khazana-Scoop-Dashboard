@@ -5,6 +5,8 @@ import {
   updateScoopPricesAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
+import { ModalLauncher } from "@/components/modal-launcher";
+import { SubmitButton } from "@/components/submit-button";
 import { Surface } from "@/components/surface";
 import { getProducts, getScoopTypes, getStockMovements } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -42,70 +44,83 @@ export default async function StockPage({ searchParams }: StockPageProps) {
           title="Add inventory item"
           description="Every gift should be stored with its current cost and available quantity."
         >
-          <form action={createProductAction} className="grid gap-4 md:grid-cols-2">
-            <label className="block md:col-span-2">
-              <span className="mb-2 block text-sm font-medium text-stone-700">
-                Product name
-              </span>
-              <input
-                type="text"
-                name="name"
-                className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
-                placeholder="Hair Clip"
-                required
-              />
-            </label>
+          <div className="space-y-4">
+            <p className="text-sm leading-6 text-stone-600">
+              Open a focused form when you want to add a new gift item. This keeps the stock page
+              lighter while you are reviewing current inventory.
+            </p>
+            <ModalLauncher
+              title="Add inventory item"
+              description="Save a new mystery scoop gift with its latest cost and opening quantity."
+              triggerLabel="Add new item"
+              triggerClassName="inline-flex items-center rounded-full bg-stone-950 px-5 py-3 text-sm font-semibold text-stone-50 transition hover:bg-stone-800"
+            >
+              <form action={createProductAction} className="grid gap-4 md:grid-cols-2">
+                <label className="block md:col-span-2">
+                  <span className="mb-2 block text-sm font-medium text-stone-700">
+                    Product name
+                  </span>
+                  <input
+                    type="text"
+                    name="name"
+                    className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
+                    placeholder="Hair Clip"
+                    required
+                  />
+                </label>
 
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-stone-700">
-                Cost price
-              </span>
-              <input
-                type="number"
-                name="unit_cost"
-                min="0"
-                step="0.01"
-                defaultValue="0"
-                className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
-                required
-              />
-            </label>
+                <label className="block">
+                  <span className="mb-2 block text-sm font-medium text-stone-700">
+                    Cost price
+                  </span>
+                  <input
+                    type="number"
+                    name="unit_cost"
+                    min="0"
+                    step="0.01"
+                    defaultValue="0"
+                    className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
+                    required
+                  />
+                </label>
 
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-stone-700">
-                Opening quantity
-              </span>
-              <input
-                type="number"
-                name="stock_quantity"
-                min="0"
-                defaultValue="0"
-                className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
-                required
-              />
-            </label>
+                <label className="block">
+                  <span className="mb-2 block text-sm font-medium text-stone-700">
+                    Opening quantity
+                  </span>
+                  <input
+                    type="number"
+                    name="stock_quantity"
+                    min="0"
+                    defaultValue="0"
+                    className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
+                    required
+                  />
+                </label>
 
-            <label className="block md:col-span-2">
-              <span className="mb-2 block text-sm font-medium text-stone-700">
-                Category
-              </span>
-              <input
-                type="text"
-                name="category"
-                defaultValue="Mystery Scoop"
-                className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
-              />
-            </label>
+                <label className="block md:col-span-2">
+                  <span className="mb-2 block text-sm font-medium text-stone-700">
+                    Category
+                  </span>
+                  <input
+                    type="text"
+                    name="category"
+                    defaultValue="Mystery Scoop"
+                    className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
+                  />
+                </label>
 
-            <div className="md:col-span-2">
-              <button
-                type="submit"
-                className="inline-flex items-center rounded-full bg-stone-950 px-5 py-3 text-sm font-semibold text-stone-50 transition hover:bg-stone-800"
-              >
-                Save item
-              </button>
-            </div>
-          </form>
+                <div className="md:col-span-2">
+                  <SubmitButton
+                    pendingLabel="Saving item..."
+                    className="inline-flex items-center rounded-full bg-stone-950 px-5 py-3 text-sm font-semibold text-stone-50 transition hover:bg-stone-800"
+                  >
+                    Save item
+                  </SubmitButton>
+                </div>
+              </form>
+            </ModalLauncher>
+          </div>
         </Surface>
 
         <Surface
@@ -130,12 +145,12 @@ export default async function StockPage({ searchParams }: StockPageProps) {
             ))}
 
             <div>
-              <button
-                type="submit"
+              <SubmitButton
+                pendingLabel="Updating prices..."
                 className="inline-flex items-center rounded-full border border-stone-950 px-5 py-3 text-sm font-semibold text-stone-950 transition hover:bg-stone-950 hover:text-stone-50"
               >
                 Update scoop prices
-              </button>
+              </SubmitButton>
             </div>
           </form>
         </Surface>
@@ -226,12 +241,12 @@ export default async function StockPage({ searchParams }: StockPageProps) {
             </label>
 
             <div>
-              <button
-                type="submit"
+              <SubmitButton
+                pendingLabel="Applying change..."
                 className="inline-flex items-center rounded-full bg-stone-950 px-5 py-3 text-sm font-semibold text-stone-50 transition hover:bg-stone-800"
               >
                 Apply adjustment
-              </button>
+              </SubmitButton>
             </div>
           </form>
         </Surface>
@@ -284,12 +299,12 @@ export default async function StockPage({ searchParams }: StockPageProps) {
                             </Link>
                             <form action={deleteProductAction}>
                               <input type="hidden" name="product_id" value={product.id} />
-                              <button
-                                type="submit"
+                              <SubmitButton
+                                pendingLabel="Deleting..."
                                 className="inline-flex rounded-full border border-rose-300 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:border-rose-600 hover:bg-rose-600 hover:text-white"
                               >
                                 Delete
-                              </button>
+                              </SubmitButton>
                             </form>
                           </div>
                         </td>

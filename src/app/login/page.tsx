@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { loginAction } from "@/app/actions";
+import { SubmitButton } from "@/components/submit-button";
 import { getDefaultCredentials, isAuthenticated } from "@/lib/auth";
 
 type LoginPageProps = {
@@ -97,12 +98,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               />
             </label>
 
-            <button
-              type="submit"
+            <SubmitButton
+              pendingLabel="Logging in..."
               className="inline-flex w-full items-center justify-center rounded-full bg-stone-950 px-5 py-3 text-sm font-semibold text-stone-50 transition hover:bg-stone-800"
             >
               Login to dashboard
-            </button>
+            </SubmitButton>
           </form>
 
           <div className="mt-6 rounded-[1.25rem] border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-stone-700">
