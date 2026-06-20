@@ -1,6 +1,7 @@
 import "server-only";
 
 import {
+  defaultScoopTypes,
   lowStockThreshold,
   manualExpenseCategories,
   manualExpenseCategoryLabels,
@@ -50,6 +51,7 @@ type OrderRecord = {
 
 type StockMovementRecord = {
   id: number;
+  product_id: number;
   quantity_delta: number;
   reason: string;
   note: string | null;
@@ -59,12 +61,22 @@ type StockMovementRecord = {
   products: { name: string } | { name: string }[] | null;
 };
 
+type PurchaseTotalRecord = {
+  product_id: number;
+  quantity_delta: number;
+  reason: string;
+};
+
 function unwrapData<T>(data: T | null, error: { message: string } | null, context: string) {
   if (error) {
     throw new Error(`${context}: ${error.message}`);
   }
 
   return data;
+}
+
+function hasMissingTotalPurchasedColumnError(error: { message: string } | null) {
+  return Boolean(error?.message.includes("total_purchased_quantity"));
 }
 
 function toNumber(value: number | string | null | undefined) {
@@ -132,6 +144,62 @@ function mapMovementProductName(record: StockMovementRecord) {
   return record.products?.name ?? "Unknown item";
 }
 
+function getStockMovementKind(
+  reason: string,
+  note: string | null,
+): "purchase" | "correction" | "order" | "return" | "initial" | "unknown" {
+  if (reason === "Initial stock") {
+    return "initial";
+  }
+
+  if (reason.startsWith("[Purchase]")) {
+    return "purchase";
+  }
+
+  if (reason.startsWith("[Correction]")) {
+    return "correction";
+  }
+
+  if (reason.startsWith("Order #")) {
+    if (note?.startsWith("Returned from") || reason.includes("deleted")) {
+      return "return";
+    }
+
+    return "order";
+  }
+
+  return "unknown";
+}
+
+function countsTowardPurchasedTotal(reason: string) {
+  return reason === "Initial stock" || reason.startsWith("[Purchase]");
+}
+
+async function getPurchasedTotalsMap() {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("stock_movements")
+    .select("product_id, quantity_delta, reason")
+    .gt("quantity_delta", 0);
+
+  const rows = unwrapData(
+    data,
+    error,
+    "Unable to load purchase totals",
+  ) as PurchaseTotalRecord[];
+
+  return rows.reduce((totals, row) => {
+    const productId = Number(row.product_id);
+
+    if (!countsTowardPurchasedTotal(row.reason)) {
+      return totals;
+    }
+
+    totals.set(productId, (totals.get(productId) ?? 0) + Number(row.quantity_delta));
+    return totals;
+  }, new Map<number, number>());
+}
+
 async function getOrdersInternal(limit?: number) {
   const supabase = getSupabase();
   let query = supabase
@@ -180,6 +248,34 @@ async function getOrdersInternal(limit?: number) {
 
 export async function getScoopTypes() {
   const supabase = getSupabase();
+  const { data: existingTypes, error: existingTypesError } = await supabase
+    .from("scoop_types")
+    .select("id, name");
+
+  const existing = unwrapData(
+    existingTypes,
+    existingTypesError,
+    "Unable to load scoop types",
+  ) as Array<{ id: number; name: string }>;
+  const existingNames = new Set(existing.map((item) => item.name));
+  const missingTypes = defaultScoopTypes.filter(
+    (scoopType) => !existingNames.has(scoopType.name),
+  );
+
+  if (missingTypes.length > 0) {
+    const { error: insertError } = await supabase.from("scoop_types").upsert(
+      missingTypes,
+      {
+        onConflict: "name",
+        ignoreDuplicates: true,
+      },
+    );
+
+    if (insertError) {
+      throw new Error(`Unable to create default scoop types: ${insertError.message}`);
+    }
+  }
+
   const { data, error } = await supabase
     .from("scoop_types")
     .select("id, name, price, sort_order")
@@ -190,12 +286,12 @@ export async function getScoopTypes() {
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
-  const [orders, products, allExpenses, recentExpenses, stockRefills] = await Promise.all([
+  const [orders, products, allExpenses, recentExpenses, recentChanges] = await Promise.all([
     getOrdersInternal(6),
     getProducts(),
     getExpenses(),
     getExpenses(6),
-    getRecentStockRefills(6),
+    getRecentStockChanges(6),
   ]);
 
   const supabase = getSupabase();
@@ -324,7 +420,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     lowStockItems,
     recentOrders,
     recentExpenses,
-    recentStockRefills: stockRefills,
+    recentChanges,
     expenseBreakdown,
   };
 }
@@ -333,13 +429,43 @@ export async function getProducts(): Promise<Product[]> {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("products")
-    .select("id, name, category, stock_quantity, unit_cost, created_at, updated_at")
+    .select(
+      "id, name, category, total_purchased_quantity, stock_quantity, unit_cost, created_at, updated_at",
+    )
     .order("name", { ascending: true })
     .order("id", { ascending: true });
+
+  if (hasMissingTotalPurchasedColumnError(error)) {
+    const [fallbackResult, purchasedTotals] = await Promise.all([
+      supabase
+        .from("products")
+        .select("id, name, category, stock_quantity, unit_cost, created_at, updated_at")
+        .order("name", { ascending: true })
+        .order("id", { ascending: true }),
+      getPurchasedTotalsMap(),
+    ]);
+    const { data: fallbackData, error: fallbackError } = fallbackResult;
+
+    return (unwrapData(
+      fallbackData,
+      fallbackError,
+      "Unable to load products",
+    ) as Product[]).map((product) => ({
+      ...product,
+      id: Number(product.id),
+      total_purchased_quantity: Math.max(
+        Number(product.stock_quantity),
+        purchasedTotals.get(Number(product.id)) ?? 0,
+      ),
+      stock_quantity: Number(product.stock_quantity),
+      unit_cost: toNumber(product.unit_cost),
+    }));
+  }
 
   return (unwrapData(data, error, "Unable to load products") as Product[]).map((product) => ({
     ...product,
     id: Number(product.id),
+    total_purchased_quantity: Number(product.total_purchased_quantity),
     stock_quantity: Number(product.stock_quantity),
     unit_cost: toNumber(product.unit_cost),
   }));
@@ -349,9 +475,42 @@ export async function getProductById(productId: number): Promise<Product | null>
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("products")
-    .select("id, name, category, stock_quantity, unit_cost, created_at, updated_at")
+    .select(
+      "id, name, category, total_purchased_quantity, stock_quantity, unit_cost, created_at, updated_at",
+    )
     .eq("id", productId)
     .maybeSingle();
+
+  if (hasMissingTotalPurchasedColumnError(error)) {
+    const [{ data: fallbackData, error: fallbackError }, purchasedTotals] = await Promise.all([
+      supabase
+        .from("products")
+        .select("id, name, category, stock_quantity, unit_cost, created_at, updated_at")
+        .eq("id", productId)
+        .maybeSingle(),
+      getPurchasedTotalsMap(),
+    ]);
+    const fallbackProduct = unwrapData(
+      fallbackData,
+      fallbackError,
+      "Unable to load product",
+    );
+
+    if (!fallbackProduct) {
+      return null;
+    }
+
+    return {
+      ...fallbackProduct,
+      id: Number(fallbackProduct.id),
+      total_purchased_quantity: Math.max(
+        Number(fallbackProduct.stock_quantity),
+        purchasedTotals.get(Number(fallbackProduct.id)) ?? 0,
+      ),
+      stock_quantity: Number(fallbackProduct.stock_quantity),
+      unit_cost: toNumber(fallbackProduct.unit_cost),
+    } as Product;
+  }
 
   const product = unwrapData(data, error, "Unable to load product");
 
@@ -362,6 +521,7 @@ export async function getProductById(productId: number): Promise<Product | null>
   return {
     ...product,
     id: Number(product.id),
+    total_purchased_quantity: Number(product.total_purchased_quantity),
     stock_quantity: Number(product.stock_quantity),
     unit_cost: toNumber(product.unit_cost),
   } as Product;
@@ -374,6 +534,7 @@ export async function getStockMovements(): Promise<StockMovement[]> {
     .select(
       `
         id,
+        product_id,
         quantity_delta,
         reason,
         note,
@@ -396,6 +557,7 @@ export async function getStockMovements(): Promise<StockMovement[]> {
   return rows.map((movement) => ({
     id: Number(movement.id),
     product_name: mapMovementProductName(movement),
+    change_kind: getStockMovementKind(movement.reason, movement.note),
     quantity_delta: Number(movement.quantity_delta),
     reason: movement.reason,
     note: movement.note,
@@ -478,7 +640,7 @@ export async function getExpenseInsights(): Promise<ExpenseInsights> {
     breakdown: dashboard.expenseBreakdown,
     recentExpenses: dashboard.recentExpenses,
     recentOrders: dashboard.recentOrders,
-    recentStockRefills: dashboard.recentStockRefills,
+    recentChanges: dashboard.recentChanges,
   };
 }
 
@@ -503,13 +665,14 @@ async function getExpenses(limit?: number): Promise<Expense[]> {
   }));
 }
 
-async function getRecentStockRefills(limit: number): Promise<StockMovement[]> {
+async function getRecentStockChanges(limit: number): Promise<StockMovement[]> {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("stock_movements")
     .select(
       `
         id,
+        product_id,
         quantity_delta,
         reason,
         note,
@@ -519,7 +682,6 @@ async function getRecentStockRefills(limit: number): Promise<StockMovement[]> {
         products ( name )
       `,
     )
-    .gt("quantity_delta", 0)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(limit);
@@ -527,12 +689,13 @@ async function getRecentStockRefills(limit: number): Promise<StockMovement[]> {
   const rows = unwrapData(
     data,
     error,
-    "Unable to load recent stock refills",
+    "Unable to load recent changes",
   ) as StockMovementRecord[];
 
   return rows.map((movement) => ({
     id: Number(movement.id),
     product_name: mapMovementProductName(movement),
+    change_kind: getStockMovementKind(movement.reason, movement.note),
     quantity_delta: Number(movement.quantity_delta),
     reason: movement.reason,
     note: movement.note,

@@ -13,6 +13,7 @@ create table if not exists public.products (
   name text not null,
   sku text not null unique,
   category text not null default 'Mystery Scoop',
+  total_purchased_quantity integer not null default 0,
   stock_quantity integer not null default 0,
   unit_cost numeric(12, 2) not null default 0,
   created_at timestamptz not null default now(),
@@ -98,7 +99,10 @@ values
   ('Small', 0, 1),
   ('Medium', 0, 2),
   ('Large', 0, 3),
-  ('Custom', 0, 4)
+  ('Custom', 0, 4),
+  ('Small Custom', 0, 5),
+  ('Medium Custom', 0, 6),
+  ('Large Custom', 0, 7)
 on conflict (name) do nothing;
 
 alter table public.products enable row level security;

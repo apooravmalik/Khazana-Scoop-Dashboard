@@ -83,6 +83,12 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
             </label>
 
             <div className="rounded-[1.25rem] border border-stone-200 bg-stone-50/70 px-4 py-4 text-sm leading-6 text-stone-600">
+              Total purchased:{" "}
+              <span className="font-semibold text-stone-900">
+                {product.total_purchased_quantity}
+              </span>
+              {" "}pieces
+              <br />
               Current stock:{" "}
               <span className="font-semibold text-stone-900">{product.stock_quantity}</span>
               {" "}pieces

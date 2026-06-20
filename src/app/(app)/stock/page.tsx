@@ -6,6 +6,7 @@ import {
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { ModalLauncher } from "@/components/modal-launcher";
+import { StockAdjustmentForm } from "@/components/stock-adjustment-form";
 import { SubmitButton } from "@/components/submit-button";
 import { Surface } from "@/components/surface";
 import { getProducts, getScoopTypes, getStockMovements } from "@/lib/data";
@@ -18,6 +19,23 @@ type StockPageProps = {
 
 function formatError(error: string) {
   return error.replaceAll("-", " ");
+}
+
+function formatMovementKindLabel(kind: string) {
+  return (
+    {
+      purchase: "Purchase refill",
+      correction: "Correction",
+      order: "Order allocation",
+      return: "Stock returned",
+      initial: "Initial stock",
+      unknown: "Other change",
+    }[kind] ?? kind
+  );
+}
+
+function formatMovementReason(reason: string) {
+  return reason.replace(/^\[(Purchase|Correction)\]\s*/, "");
 }
 
 export default async function StockPage({ searchParams }: StockPageProps) {
@@ -156,111 +174,32 @@ export default async function StockPage({ searchParams }: StockPageProps) {
         </Surface>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+      <section className="grid gap-6">
         <Surface
           title="Update item quantity"
           description="Pick an item, enter how many pieces you want to add or remove, and save the change. This updates stock only. Refill money should be logged separately on the Expenses page."
         >
-          <form action={adjustStockAction} className="grid gap-4">
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-stone-700">
-                Item
-              </span>
-              <select
-                name="product_id"
-                className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
-                required
-              >
-                <option value="">Select an item</option>
-                {products.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.name} ({product.stock_quantity} in stock)
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-stone-700">
-                  Quantity change
-                </span>
-                <input
-                  type="number"
-                  name="quantity_delta"
-                  className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
-                  placeholder="Example: 12 to add, -3 to remove"
-                  required
-                />
-                <p className="mt-2 text-xs text-stone-500">
-                  Use a normal number to add stock. Use a minus sign if you want to reduce stock.
-                </p>
-              </label>
-
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-stone-700">
-                  Cost price
-                </span>
-                <input
-                  type="number"
-                  name="unit_cost"
-                  min="0"
-                  step="0.01"
-                  className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
-                  placeholder="Optional, if the latest cost changed"
-                />
-                <p className="mt-2 text-xs text-stone-500">
-                  Fill this only when the item cost has changed during a refill.
-                </p>
-              </label>
-            </div>
-
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-stone-700">
-                Reason
-              </span>
-              <input
-                type="text"
-                name="reason"
-                className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
-                placeholder="Example: New stock arrived"
-                required
-              />
-            </label>
-
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-stone-700">
-                Extra note
-              </span>
-              <textarea
-                name="note"
-                rows={4}
-                className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
-                placeholder="Optional details"
-              />
-            </label>
-
-            <div>
-              <SubmitButton
-                pendingLabel="Applying change..."
-                className="inline-flex items-center rounded-full bg-stone-950 px-5 py-3 text-sm font-semibold text-stone-50 transition hover:bg-stone-800"
-              >
-                Apply adjustment
-              </SubmitButton>
-            </div>
-          </form>
+          <StockAdjustmentForm products={products} action={adjustStockAction} />
         </Surface>
 
         <Surface
           title="Current inventory"
-          description="Cost and quantity are the only values needed for mystery scoop gift tracking."
+          description="Track how much stock has been purchased overall and how much is currently left for mystery scoop fulfilment."
         >
           <div className="overflow-hidden rounded-[1.5rem] border border-stone-200">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-stone-200 text-left text-sm">
                 <thead className="bg-stone-100/80">
                   <tr>
-                    {["Product", "Category", "Quantity", "Cost", "Stock value", "Actions"].map(
+                    {[
+                      "Product",
+                      "Category",
+                      "Total purchased",
+                      "Current quantity",
+                      "Cost",
+                      "Stock value",
+                      "Actions",
+                    ].map(
                       (heading) => (
                         <th
                           key={heading}
@@ -280,6 +219,9 @@ export default async function StockPage({ searchParams }: StockPageProps) {
                           {product.name}
                         </td>
                         <td className="px-4 py-4 text-stone-600">{product.category}</td>
+                        <td className="px-4 py-4 text-stone-700">
+                          {product.total_purchased_quantity}
+                        </td>
                         <td className="px-4 py-4 text-stone-700">
                           {product.stock_quantity}
                         </td>
@@ -312,7 +254,7 @@ export default async function StockPage({ searchParams }: StockPageProps) {
                     ))
                   ) : (
                     <tr>
-                      <td className="px-4 py-6 text-stone-500" colSpan={6}>
+                      <td className="px-4 py-6 text-stone-500" colSpan={7}>
                         No inventory items yet. Add the first gift item above.
                       </td>
                     </tr>
@@ -324,58 +266,65 @@ export default async function StockPage({ searchParams }: StockPageProps) {
         </Surface>
       </section>
 
-      <Surface
-        title="Latest stock movements"
-        description="Every refill, allocation, and correction is saved here with its cost snapshot."
-      >
-        <div className="space-y-3">
-          {movements.length > 0 ? (
-            movements.map((movement) => (
-              <div
-                key={movement.id}
-                className="rounded-[1.25rem] border border-stone-200 bg-stone-50/70 px-4 py-4"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="font-semibold text-stone-900">{movement.product_name}</p>
-                    <p className="mt-1 text-sm text-stone-600">{movement.reason}</p>
-                    <p className="mt-1 text-xs text-stone-500">
-                      {movement.note || "No note"} · {formatDate(movement.created_at)}
-                    </p>
-                  </div>
+      <section className="grid gap-6">
+        <Surface
+          title="Latest stock movements"
+          description="Every purchase, correction, order allocation, and return is saved here with its cost snapshot."
+        >
+          <div className="space-y-3">
+            {movements.length > 0 ? (
+              movements.map((movement) => (
+                <div
+                  key={movement.id}
+                  className="rounded-[1.25rem] border border-stone-200 bg-stone-50/70 px-4 py-4"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="font-semibold text-stone-900">{movement.product_name}</p>
+                      <p className="mt-1 text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+                        {formatMovementKindLabel(movement.change_kind)}
+                      </p>
+                      <p className="mt-1 text-sm text-stone-600">
+                        {formatMovementReason(movement.reason)}
+                      </p>
+                      <p className="mt-1 text-xs text-stone-500">
+                        {movement.note || "No note"} · {formatDate(movement.created_at)}
+                      </p>
+                    </div>
 
-                  <div className="text-right">
-                    <p
-                      className={`text-sm font-semibold ${
-                        movement.quantity_delta > 0 ? "text-emerald-700" : "text-rose-700"
-                      }`}
-                    >
-                      {movement.quantity_delta > 0 ? "+" : ""}
-                      {movement.quantity_delta}
-                    </p>
-                    <p className="mt-1 text-xs text-stone-500">
-                      Cost snapshot{" "}
-                      {movement.unit_cost_snapshot !== null
-                        ? formatCurrency(movement.unit_cost_snapshot)
-                        : "-"}
-                    </p>
-                    <p className="mt-1 text-xs text-stone-500">
-                      Value{" "}
-                      {movement.movement_value !== null
-                        ? formatCurrency(movement.movement_value)
-                        : "-"}
-                    </p>
+                    <div className="text-right">
+                      <p
+                        className={`text-sm font-semibold ${
+                          movement.quantity_delta > 0 ? "text-emerald-700" : "text-rose-700"
+                        }`}
+                      >
+                        {movement.quantity_delta > 0 ? "+" : ""}
+                        {movement.quantity_delta}
+                      </p>
+                      <p className="mt-1 text-xs text-stone-500">
+                        Cost snapshot{" "}
+                        {movement.unit_cost_snapshot !== null
+                          ? formatCurrency(movement.unit_cost_snapshot)
+                          : "-"}
+                      </p>
+                      <p className="mt-1 text-xs text-stone-500">
+                        Value{" "}
+                        {movement.movement_value !== null
+                          ? formatCurrency(movement.movement_value)
+                          : "-"}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
-          ) : (
-            <p className="text-sm text-stone-500">
-              Stock movement history will appear here after the first inventory change.
-            </p>
-          )}
-        </div>
-      </Surface>
+              ))
+            ) : (
+              <p className="text-sm text-stone-500">
+                Stock movement history will appear here after the first inventory change.
+              </p>
+            )}
+          </div>
+        </Surface>
+      </section>
     </AppShell>
   );
 }

@@ -12,6 +12,9 @@ export const defaultScoopTypes = [
   { name: "Medium", price: 0, sort_order: 2 },
   { name: "Large", price: 0, sort_order: 3 },
   { name: "Custom", price: 0, sort_order: 4 },
+  { name: "Small Custom", price: 0, sort_order: 5 },
+  { name: "Medium Custom", price: 0, sort_order: 6 },
+  { name: "Large Custom", price: 0, sort_order: 7 },
 ] as const;
 
 export const lowStockThreshold = 5;

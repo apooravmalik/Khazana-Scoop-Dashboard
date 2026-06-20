@@ -6,14 +6,31 @@ import { manualExpenseCategoryLabels } from "@/lib/constants";
 import { getDashboardData } from "@/lib/data";
 import { formatCount, formatCurrency, formatDate } from "@/lib/format";
 
+function formatMovementKindLabel(kind: string) {
+  return (
+    {
+      purchase: "Purchase refill",
+      correction: "Correction",
+      order: "Order allocation",
+      return: "Stock returned",
+      initial: "Initial stock",
+      unknown: "Other change",
+    }[kind] ?? kind
+  );
+}
+
+function formatMovementReason(reason: string) {
+  return reason.replace(/^\[(Purchase|Correction)\]\s*/, "");
+}
+
 export default async function DashboardPage() {
   const {
     expenseBreakdown,
     lowStockItems,
     metrics,
+    recentChanges,
     recentExpenses,
     recentOrders,
-    recentStockRefills,
   } = await getDashboardData();
 
   return (
@@ -272,23 +289,35 @@ export default async function DashboardPage() {
         </Surface>
 
         <Surface
-          title="Recent stock refills"
-          description="Latest inventory additions and manual stock changes. Quantity updates here do not change cash out."
+          title="Change log"
+          description="Latest stock changes that affected purchased totals, current quantities, or order allocations."
         >
           <div className="space-y-3">
-            {recentStockRefills.length > 0 ? (
-              recentStockRefills.map((movement) => (
+            {recentChanges.length > 0 ? (
+              recentChanges.map((movement) => (
                 <div
                   key={movement.id}
                   className="rounded-[1.25rem] border border-stone-200 bg-stone-50/70 px-4 py-4"
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold text-stone-900">{movement.product_name}</p>
-                    <p className="text-sm font-semibold text-emerald-700">
-                      +{movement.quantity_delta}
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-stone-900">{movement.product_name}</p>
+                      <p className="mt-1 text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+                        {formatMovementKindLabel(movement.change_kind)}
+                      </p>
+                    </div>
+                    <p
+                      className={`text-sm font-semibold ${
+                        movement.quantity_delta > 0 ? "text-emerald-700" : "text-rose-700"
+                      }`}
+                    >
+                      {movement.quantity_delta > 0 ? "+" : ""}
+                      {movement.quantity_delta}
                     </p>
                   </div>
-                  <p className="mt-2 text-sm text-stone-600">{movement.reason}</p>
+                  <p className="mt-2 text-sm text-stone-600">
+                    {formatMovementReason(movement.reason)}
+                  </p>
                   <p className="mt-1 text-xs text-stone-500">
                     {formatDate(movement.created_at)} ·{" "}
                     {movement.movement_value !== null
@@ -299,7 +328,7 @@ export default async function DashboardPage() {
               ))
             ) : (
               <p className="text-sm text-stone-500">
-                Stock refill activity will show up here after the next inventory addition.
+                Recent stock changes will appear here after the next inventory update or order.
               </p>
             )}
           </div>

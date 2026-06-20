@@ -15,6 +15,7 @@ type SelectedOrderItem = {
 type ProductSnapshot = {
   id: number;
   name: string;
+  total_purchased_quantity: number;
   stock_quantity: number;
   unit_cost: number;
 };
@@ -22,6 +23,12 @@ type ProductSnapshot = {
 type ExistingOrderItem = {
   product_id: number;
   quantity: number;
+};
+
+type PurchaseTotalRecord = {
+  product_id: number;
+  quantity_delta: number;
+  reason: string;
 };
 
 function getText(formData: FormData, key: string) {
@@ -135,6 +142,43 @@ function getIsoTimestamp() {
   return new Date().toISOString();
 }
 
+function hasMissingTotalPurchasedColumnError(error: { message: string } | null) {
+  return Boolean(error?.message.includes("total_purchased_quantity"));
+}
+
+function countsTowardPurchasedTotal(reason: string) {
+  return reason === "Initial stock" || reason.startsWith("[Purchase]");
+}
+
+async function getPurchasedTotalsMap(productIds: number[]) {
+  const supabase = getSupabase();
+
+  if (productIds.length === 0) {
+    return new Map<number, number>();
+  }
+
+  const { data, error } = await supabase
+    .from("stock_movements")
+    .select("product_id, quantity_delta, reason")
+    .in("product_id", productIds)
+    .gt("quantity_delta", 0);
+
+  if (error) {
+    throw new Error(`Unable to load purchase totals: ${error.message}`);
+  }
+
+  return ((data ?? []) as PurchaseTotalRecord[]).reduce((totals, row) => {
+    const productId = Number(row.product_id);
+
+    if (!countsTowardPurchasedTotal(row.reason)) {
+      return totals;
+    }
+
+    totals.set(productId, (totals.get(productId) ?? 0) + Number(row.quantity_delta));
+    return totals;
+  }, new Map<number, number>());
+}
+
 async function fetchProductsByIds(productIds: number[]) {
   const supabase = getSupabase();
 
@@ -144,8 +188,33 @@ async function fetchProductsByIds(productIds: number[]) {
 
   const { data, error } = await supabase
     .from("products")
-    .select("id, name, stock_quantity, unit_cost")
+    .select("id, name, total_purchased_quantity, stock_quantity, unit_cost")
     .in("id", productIds);
+
+  if (hasMissingTotalPurchasedColumnError(error)) {
+    const [{ data: fallbackData, error: fallbackError }, purchasedTotals] = await Promise.all([
+      supabase
+        .from("products")
+        .select("id, name, stock_quantity, unit_cost")
+        .in("id", productIds),
+      getPurchasedTotalsMap(productIds),
+    ]);
+
+    if (fallbackError) {
+      throw new Error(`Unable to load products: ${fallbackError.message}`);
+    }
+
+    return (fallbackData ?? []).map((product) => ({
+      id: Number(product.id),
+      name: product.name,
+      total_purchased_quantity: Math.max(
+        Number(product.stock_quantity),
+        purchasedTotals.get(Number(product.id)) ?? 0,
+      ),
+      stock_quantity: Number(product.stock_quantity),
+      unit_cost: toNumber(product.unit_cost),
+    }));
+  }
 
   if (error) {
     throw new Error(`Unable to load products: ${error.message}`);
@@ -154,6 +223,7 @@ async function fetchProductsByIds(productIds: number[]) {
   return (data ?? []).map((product) => ({
     id: Number(product.id),
     name: product.name,
+    total_purchased_quantity: Number(product.total_purchased_quantity),
     stock_quantity: Number(product.stock_quantity),
     unit_cost: toNumber(product.unit_cost),
   }));
@@ -295,17 +365,35 @@ export async function createProductAction(formData: FormData) {
 
   const supabase = getSupabase();
   const sku = await generateInternalSku(name);
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("products")
     .insert({
       name,
       sku,
       category,
+      total_purchased_quantity: initialStock,
       stock_quantity: initialStock,
       unit_cost: unitCost,
     })
     .select("id")
     .single();
+
+  if (hasMissingTotalPurchasedColumnError(error)) {
+    const retryResult = await supabase
+      .from("products")
+      .insert({
+        name,
+        sku,
+        category,
+        stock_quantity: initialStock,
+        unit_cost: unitCost,
+      })
+      .select("id")
+      .single();
+
+    data = retryResult.data;
+    error = retryResult.error;
+  }
 
   if (error || !data) {
     redirect("/stock?error=unable-to-create-product");
@@ -396,13 +484,22 @@ export async function deleteProductAction(formData: FormData) {
 
 export async function adjustStockAction(formData: FormData) {
   const productId = getNumber(formData, "product_id");
+  const adjustmentKind = getText(formData, "adjustment_kind");
   const quantityDelta = getNumber(formData, "quantity_delta");
   const reason = getText(formData, "reason");
   const note = getText(formData, "note");
   const providedUnitCost = getOptionalNumber(formData, "unit_cost");
 
-  if (!productId || !quantityDelta || !reason) {
+  if (!productId || !quantityDelta || !reason || !adjustmentKind) {
     redirect("/stock?error=invalid-stock-adjustment");
+  }
+
+  if (adjustmentKind !== "purchase" && adjustmentKind !== "correction") {
+    redirect("/stock?error=invalid-stock-adjustment-type");
+  }
+
+  if (adjustmentKind === "purchase" && quantityDelta <= 0) {
+    redirect("/stock?error=purchase-refill-must-be-positive");
   }
 
   const products = await fetchProductsByIds([productId]);
@@ -418,15 +515,36 @@ export async function adjustStockAction(formData: FormData) {
       : product.unit_cost;
   const movementValue = Math.abs(quantityDelta) * activeUnitCost;
   const supabase = getSupabase();
+  const stockReason =
+    adjustmentKind === "purchase"
+      ? `[Purchase] ${reason}`
+      : `[Correction] ${reason}`;
 
-  const { error } = await supabase
+  let { error } = await supabase
     .from("products")
     .update({
+      total_purchased_quantity:
+        adjustmentKind === "purchase"
+          ? product.total_purchased_quantity + quantityDelta
+          : product.total_purchased_quantity,
       stock_quantity: product.stock_quantity + quantityDelta,
       unit_cost: activeUnitCost,
       updated_at: getIsoTimestamp(),
     })
     .eq("id", productId);
+
+  if (hasMissingTotalPurchasedColumnError(error)) {
+    const retryResult = await supabase
+      .from("products")
+      .update({
+        stock_quantity: product.stock_quantity + quantityDelta,
+        unit_cost: activeUnitCost,
+        updated_at: getIsoTimestamp(),
+      })
+      .eq("id", productId);
+
+    error = retryResult.error;
+  }
 
   if (error) {
     redirect("/stock?error=unable-to-adjust-stock");
@@ -436,7 +554,7 @@ export async function adjustStockAction(formData: FormData) {
     {
       product_id: productId,
       quantity_delta: quantityDelta,
-      reason,
+      reason: stockReason,
       note: note || null,
       unit_cost_snapshot: activeUnitCost,
       movement_value: movementValue,

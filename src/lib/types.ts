@@ -2,6 +2,7 @@ export type Product = {
   id: number;
   name: string;
   category: string;
+  total_purchased_quantity: number;
   stock_quantity: number;
   unit_cost: number;
   created_at: string;
@@ -18,6 +19,7 @@ export type ScoopType = {
 export type StockMovement = {
   id: number;
   product_name: string;
+  change_kind: "purchase" | "correction" | "order" | "return" | "initial" | "unknown";
   quantity_delta: number;
   reason: string;
   note: string | null;
@@ -106,7 +108,7 @@ export type DashboardData = {
   lowStockItems: Product[];
   recentOrders: OrderRow[];
   recentExpenses: Expense[];
-  recentStockRefills: StockMovement[];
+  recentChanges: StockMovement[];
   expenseBreakdown: ExpenseBreakdown[];
 };
 
@@ -130,5 +132,5 @@ export type ExpenseInsights = {
   breakdown: ExpenseBreakdown[];
   recentExpenses: Expense[];
   recentOrders: OrderRow[];
-  recentStockRefills: StockMovement[];
+  recentChanges: StockMovement[];
 };
