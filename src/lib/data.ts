@@ -8,7 +8,11 @@ import {
 } from "@/lib/constants";
 import { getSupabase } from "@/lib/db";
 import type {
+  CatalogProduct,
+  Category,
+  Collection,
   DashboardData,
+  Discount,
   Expense,
   ExpenseBreakdown,
   ExpenseInsights,
@@ -16,6 +20,7 @@ import type {
   OrderItem,
   OrderRow,
   Product,
+  ProductImage,
   ScoopType,
   StockMovement,
 } from "@/lib/types";
@@ -79,8 +84,20 @@ function hasMissingTotalPurchasedColumnError(error: { message: string } | null) 
   return Boolean(error?.message.includes("total_purchased_quantity"));
 }
 
+function hasMissingColumnError(error: { message: string } | null, column: string) {
+  return Boolean(error?.message.includes(column));
+}
+
 function toNumber(value: number | string | null | undefined) {
   return Number(value ?? 0);
+}
+
+function toStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item)).filter(Boolean);
+  }
+
+  return [];
 }
 
 function mapOrderItems(items: OrderRecord["order_items"]): OrderItem[] {
@@ -430,16 +447,22 @@ export async function getProducts(): Promise<Product[]> {
   const { data, error } = await supabase
     .from("products")
     .select(
-      "id, name, category, total_purchased_quantity, stock_quantity, unit_cost, created_at, updated_at",
+      "id, name, sku, slug, category, category_id, description, base_price, active, primary_image_url, available_colours, sort_order, total_purchased_quantity, stock_quantity, unit_cost, created_at, updated_at",
     )
+    .order("sort_order", { ascending: true })
     .order("name", { ascending: true })
     .order("id", { ascending: true });
 
-  if (hasMissingTotalPurchasedColumnError(error)) {
+  if (
+    hasMissingTotalPurchasedColumnError(error) ||
+    hasMissingColumnError(error, "slug") ||
+    hasMissingColumnError(error, "base_price") ||
+    hasMissingColumnError(error, "available_colours")
+  ) {
     const [fallbackResult, purchasedTotals] = await Promise.all([
       supabase
         .from("products")
-        .select("id, name, category, stock_quantity, unit_cost, created_at, updated_at")
+        .select("id, name, sku, category, stock_quantity, unit_cost, created_at, updated_at")
         .order("name", { ascending: true })
         .order("id", { ascending: true }),
       getPurchasedTotalsMap(),
@@ -453,6 +476,16 @@ export async function getProducts(): Promise<Product[]> {
     ) as Product[]).map((product) => ({
       ...product,
       id: Number(product.id),
+      sku: String((product as { sku?: string }).sku ?? ""),
+      slug: String((product as { sku?: string; slug?: string }).slug ?? (product as { sku?: string }).sku ?? "")
+        .toLowerCase(),
+      category_id: null,
+      description: null,
+      base_price: 0,
+      active: true,
+      primary_image_url: null,
+      available_colours: [],
+      sort_order: 0,
       total_purchased_quantity: Math.max(
         Number(product.stock_quantity),
         purchasedTotals.get(Number(product.id)) ?? 0,
@@ -465,6 +498,10 @@ export async function getProducts(): Promise<Product[]> {
   return (unwrapData(data, error, "Unable to load products") as Product[]).map((product) => ({
     ...product,
     id: Number(product.id),
+    category_id: product.category_id === null ? null : Number(product.category_id),
+    base_price: toNumber(product.base_price),
+    available_colours: toStringArray(product.available_colours),
+    sort_order: Number(product.sort_order),
     total_purchased_quantity: Number(product.total_purchased_quantity),
     stock_quantity: Number(product.stock_quantity),
     unit_cost: toNumber(product.unit_cost),
@@ -476,16 +513,21 @@ export async function getProductById(productId: number): Promise<Product | null>
   const { data, error } = await supabase
     .from("products")
     .select(
-      "id, name, category, total_purchased_quantity, stock_quantity, unit_cost, created_at, updated_at",
+      "id, name, sku, slug, category, category_id, description, base_price, active, primary_image_url, available_colours, sort_order, total_purchased_quantity, stock_quantity, unit_cost, created_at, updated_at",
     )
     .eq("id", productId)
     .maybeSingle();
 
-  if (hasMissingTotalPurchasedColumnError(error)) {
+  if (
+    hasMissingTotalPurchasedColumnError(error) ||
+    hasMissingColumnError(error, "slug") ||
+    hasMissingColumnError(error, "base_price") ||
+    hasMissingColumnError(error, "available_colours")
+  ) {
     const [{ data: fallbackData, error: fallbackError }, purchasedTotals] = await Promise.all([
       supabase
         .from("products")
-        .select("id, name, category, stock_quantity, unit_cost, created_at, updated_at")
+        .select("id, name, sku, category, stock_quantity, unit_cost, created_at, updated_at")
         .eq("id", productId)
         .maybeSingle(),
       getPurchasedTotalsMap(),
@@ -503,6 +545,19 @@ export async function getProductById(productId: number): Promise<Product | null>
     return {
       ...fallbackProduct,
       id: Number(fallbackProduct.id),
+      sku: String((fallbackProduct as { sku?: string }).sku ?? ""),
+      slug: String(
+        (fallbackProduct as { slug?: string; sku?: string }).slug ??
+          (fallbackProduct as { sku?: string }).sku ??
+          "",
+      ).toLowerCase(),
+      category_id: null,
+      description: null,
+      base_price: 0,
+      active: true,
+      primary_image_url: null,
+      available_colours: [],
+      sort_order: 0,
       total_purchased_quantity: Math.max(
         Number(fallbackProduct.stock_quantity),
         purchasedTotals.get(Number(fallbackProduct.id)) ?? 0,
@@ -521,10 +576,247 @@ export async function getProductById(productId: number): Promise<Product | null>
   return {
     ...product,
     id: Number(product.id),
+    category_id: product.category_id === null ? null : Number(product.category_id),
+    base_price: toNumber(product.base_price),
+    available_colours: toStringArray(product.available_colours),
+    sort_order: Number(product.sort_order),
     total_purchased_quantity: Number(product.total_purchased_quantity),
     stock_quantity: Number(product.stock_quantity),
     unit_cost: toNumber(product.unit_cost),
   } as Product;
+}
+
+function mapCategoryRecord(row: Record<string, unknown>): Category {
+  return {
+    id: Number(row.id),
+    name: String(row.name ?? ""),
+    slug: String(row.slug ?? ""),
+    active: Boolean(row.active ?? true),
+    sort_order: Number(row.sort_order ?? 0),
+    created_at: String(row.created_at ?? ""),
+  };
+}
+
+function mapCollectionRecord(row: Record<string, unknown>): Collection {
+  return {
+    id: Number(row.id),
+    name: String(row.name ?? ""),
+    slug: String(row.slug ?? ""),
+    active: Boolean(row.active ?? true),
+    sort_order: Number(row.sort_order ?? 0),
+    created_at: String(row.created_at ?? ""),
+  };
+}
+
+function mapProductImageRecord(row: Record<string, unknown>): ProductImage {
+  return {
+    id: Number(row.id),
+    product_id: Number(row.product_id),
+    url: String(row.url ?? ""),
+    alt_text: row.alt_text === null ? null : String(row.alt_text ?? ""),
+    sort_order: Number(row.sort_order ?? 0),
+    created_at: String(row.created_at ?? ""),
+  };
+}
+
+function mapDiscountRecord(row: Record<string, unknown>): Discount {
+  return {
+    id: Number(row.id),
+    target_type: String(row.target_type ?? "product") as Discount["target_type"],
+    target_id: Number(row.target_id),
+    amount: toNumber(row.amount as number | string | null | undefined),
+    type: String(row.type ?? "fixed") as Discount["type"],
+    start_at: row.start_at === null ? null : String(row.start_at ?? ""),
+    end_at: row.end_at === null ? null : String(row.end_at ?? ""),
+    active: Boolean(row.active ?? true),
+    created_at: String(row.created_at ?? ""),
+  };
+}
+
+function isDiscountCurrentlyActive(discount: Discount, now = new Date()) {
+  if (!discount.active) {
+    return false;
+  }
+
+  const startsAt = discount.start_at ? new Date(discount.start_at) : null;
+  const endsAt = discount.end_at ? new Date(discount.end_at) : null;
+
+  if (startsAt && startsAt > now) {
+    return false;
+  }
+
+  if (endsAt && endsAt < now) {
+    return false;
+  }
+
+  return true;
+}
+
+function applyDiscount(basePrice: number, discount: Discount | null) {
+  if (!discount) {
+    return basePrice;
+  }
+
+  if (discount.type === "percent") {
+    return Math.max(0, basePrice - basePrice * (discount.amount / 100));
+  }
+
+  return Math.max(0, basePrice - discount.amount);
+}
+
+function pickBestDiscount(
+  product: Product,
+  productCollections: Collection[],
+  allDiscounts: Discount[],
+) {
+  const candidates = allDiscounts.filter((discount) => {
+    if (!isDiscountCurrentlyActive(discount)) {
+      return false;
+    }
+
+    if (discount.target_type === "product") {
+      return discount.target_id === product.id;
+    }
+
+    if (discount.target_type === "category") {
+      return product.category_id !== null && discount.target_id === product.category_id;
+    }
+
+    return productCollections.some((collection) => collection.id === discount.target_id);
+  });
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  return candidates.reduce<Discount | null>((best, candidate) => {
+    if (!best) {
+      return candidate;
+    }
+
+    return applyDiscount(product.base_price, candidate) < applyDiscount(product.base_price, best)
+      ? candidate
+      : best;
+  }, null);
+}
+
+export async function getCategories(): Promise<Category[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("categories")
+    .select("id, name, slug, active, sort_order, created_at")
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true });
+
+  if (error) {
+    return [];
+  }
+
+  return (data ?? []).map((row) => mapCategoryRecord(row as Record<string, unknown>));
+}
+
+export async function getCollections(): Promise<Collection[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("collections")
+    .select("id, name, slug, active, sort_order, created_at")
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true });
+
+  if (error) {
+    return [];
+  }
+
+  return (data ?? []).map((row) => mapCollectionRecord(row as Record<string, unknown>));
+}
+
+export async function getDiscounts(): Promise<Discount[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("discounts")
+    .select("id, target_type, target_id, amount, type, start_at, end_at, active, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return [];
+  }
+
+  return (data ?? []).map((row) => mapDiscountRecord(row as Record<string, unknown>));
+}
+
+export async function getCatalogProducts(): Promise<CatalogProduct[]> {
+  const [products, categories, collections, discounts] = await Promise.all([
+    getProducts(),
+    getCategories(),
+    getCollections(),
+    getDiscounts(),
+  ]);
+
+  const supabase = getSupabase();
+  const productIds = products.map((product) => product.id);
+  const [imagesResult, linksResult] = await Promise.all([
+    productIds.length
+      ? supabase
+          .from("product_images")
+          .select("id, product_id, url, alt_text, sort_order, created_at")
+          .in("product_id", productIds)
+          .order("sort_order", { ascending: true })
+          .order("id", { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
+    productIds.length
+      ? supabase
+          .from("product_collections")
+          .select("product_id, collection_id")
+          .in("product_id", productIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  const images = imagesResult.error
+    ? []
+    : (imagesResult.data ?? []).map((row) => mapProductImageRecord(row as Record<string, unknown>));
+  const categoryMap = new Map(categories.map((category) => [category.id, category]));
+  const collectionMap = new Map(collections.map((collection) => [collection.id, collection]));
+  const imagesByProductId = images.reduce((acc, image) => {
+    const current = acc.get(image.product_id) ?? [];
+    current.push(image);
+    acc.set(image.product_id, current);
+    return acc;
+  }, new Map<number, ProductImage[]>());
+  const collectionsByProductId = (linksResult.error ? [] : linksResult.data ?? []).reduce(
+    (acc, row) => {
+      const productId = Number((row as { product_id: number }).product_id);
+      const collectionId = Number((row as { collection_id: number }).collection_id);
+      const collection = collectionMap.get(collectionId);
+
+      if (!collection) {
+        return acc;
+      }
+
+      const current = acc.get(productId) ?? [];
+      current.push(collection);
+      acc.set(productId, current);
+      return acc;
+    },
+    new Map<number, Collection[]>(),
+  );
+
+  return products.map((product) => {
+    const productCollections = collectionsByProductId.get(product.id) ?? [];
+    const activeDiscount = pickBestDiscount(product, productCollections, discounts);
+    return {
+      ...product,
+      category_record: product.category_id === null ? null : categoryMap.get(product.category_id) ?? null,
+      collections: productCollections,
+      images: imagesByProductId.get(product.id) ?? [],
+      active_discount: activeDiscount,
+      effective_price: applyDiscount(product.base_price, activeDiscount),
+    };
+  });
+}
+
+export async function getCatalogProductById(productId: number): Promise<CatalogProduct | null> {
+  const products = await getCatalogProducts();
+  return products.find((product) => product.id === productId) ?? null;
 }
 
 export async function getStockMovements(): Promise<StockMovement[]> {
