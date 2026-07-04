@@ -47,6 +47,11 @@ function getOptionalNumber(formData: FormData, key: string) {
 
 function refreshApp() {
   revalidatePath("/");
+  revalidatePath("/products");
+  revalidatePath("/products/new");
+  revalidatePath("/categories");
+  revalidatePath("/collections");
+  revalidatePath("/discounts");
   revalidatePath("/stock");
   revalidatePath("/orders");
   revalidatePath("/expenses");
@@ -59,6 +64,14 @@ function slugifyName(value: string) {
     .replace(/[^A-Z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 36);
+}
+
+function slugifyRoute(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
 }
 
 async function generateInternalSku(name: string) {
@@ -140,6 +153,105 @@ function getExistingItemsMap(items: ExistingOrderItem[]) {
 
 function getIsoTimestamp() {
   return new Date().toISOString();
+}
+
+function getNumberList(formData: FormData, key: string) {
+  return formData
+    .getAll(key)
+    .map((value) => Number(String(value)))
+    .filter((value) => Number.isFinite(value) && value > 0);
+}
+
+function getTextLines(formData: FormData, key: string) {
+  return getText(formData, key)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function getBooleanInput(formData: FormData, key: string, defaultValue = true) {
+  const values = formData.getAll(key).map((value) => String(value));
+
+  if (values.length === 0) {
+    return defaultValue;
+  }
+
+  return values[values.length - 1] === "true";
+}
+
+function asNullablePositiveInteger(value: number | null) {
+  return value !== null && Number.isFinite(value) && value > 0 ? Math.trunc(value) : null;
+}
+
+function parseStoragePathFromPublicUrl(url: string) {
+  const marker = "/storage/v1/object/public/product-images/";
+  const index = url.indexOf(marker);
+
+  if (index === -1) {
+    return null;
+  }
+
+  return decodeURIComponent(url.slice(index + marker.length));
+}
+
+async function syncProductCollections(productId: number, collectionIds: number[]) {
+  const supabase = getSupabase();
+  const { error: deleteError } = await supabase
+    .from("product_collections")
+    .delete()
+    .eq("product_id", productId);
+
+  if (deleteError) {
+    throw new Error(`Unable to clear product collections: ${deleteError.message}`);
+  }
+
+  if (collectionIds.length === 0) {
+    return;
+  }
+
+  const { error: insertError } = await supabase.from("product_collections").insert(
+    collectionIds.map((collectionId) => ({
+      product_id: productId,
+      collection_id: collectionId,
+    })),
+  );
+
+  if (insertError) {
+    throw new Error(`Unable to save product collections: ${insertError.message}`);
+  }
+}
+
+async function syncProductImages(productId: number, primaryImageUrl: string | null, galleryImages: string[]) {
+  const supabase = getSupabase();
+  const uniqueImages = Array.from(
+    new Set([primaryImageUrl, ...galleryImages].filter((value): value is string => Boolean(value))),
+  );
+
+  const { error: deleteError } = await supabase
+    .from("product_images")
+    .delete()
+    .eq("product_id", productId);
+
+  if (deleteError) {
+    throw new Error(`Unable to clear product images: ${deleteError.message}`);
+  }
+
+  if (uniqueImages.length === 0) {
+    return;
+  }
+
+  const { error: insertError } = await supabase.from("product_images").insert(
+    uniqueImages.map((url, index) => ({
+      product_id: productId,
+      url,
+      alt_text: null,
+      sort_order: index,
+    })),
+  );
+
+  if (insertError) {
+    throw new Error(`Unable to save product images: ${insertError.message}`);
+  }
 }
 
 function hasMissingTotalPurchasedColumnError(error: { message: string } | null) {
@@ -356,8 +468,23 @@ export async function logoutAction() {
 export async function createProductAction(formData: FormData) {
   const name = getText(formData, "name");
   const category = getText(formData, "category") || "Mystery Scoop";
+  const categoryId = asNullablePositiveInteger(getOptionalNumber(formData, "category_id"));
   const initialStock = Math.max(0, getNumber(formData, "stock_quantity"));
   const unitCost = Math.max(0, getNumber(formData, "unit_cost"));
+  const slug = slugifyRoute(getText(formData, "slug") || name);
+  const description = getText(formData, "description") || null;
+  const basePrice = Math.max(0, getOptionalNumber(formData, "base_price") ?? 0);
+  const primaryImageUrl = getText(formData, "primary_image_url") || null;
+  const colourText = getText(formData, "available_colours");
+  const collectionIds = getNumberList(formData, "collection_ids");
+  const galleryImages = getTextLines(formData, "gallery_images");
+  const availableColours = colourText
+    ? colourText
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
+  const active = getBooleanInput(formData, "active", true);
 
   if (!name) {
     redirect("/stock?error=missing-product-name");
@@ -370,7 +497,15 @@ export async function createProductAction(formData: FormData) {
     .insert({
       name,
       sku,
+      slug,
       category,
+      category_id: categoryId,
+      description,
+      base_price: basePrice,
+      active,
+      primary_image_url: primaryImageUrl,
+      available_colours: availableColours,
+      sort_order: 0,
       total_purchased_quantity: initialStock,
       stock_quantity: initialStock,
       unit_cost: unitCost,
@@ -384,7 +519,9 @@ export async function createProductAction(formData: FormData) {
       .insert({
         name,
         sku,
+        slug,
         category,
+        category_id: categoryId,
         stock_quantity: initialStock,
         unit_cost: unitCost,
       })
@@ -412,37 +549,92 @@ export async function createProductAction(formData: FormData) {
     ]);
   }
 
+  try {
+    await syncProductCollections(Number(data.id), collectionIds);
+    await syncProductImages(Number(data.id), primaryImageUrl, galleryImages);
+  } catch {
+    redirect("/products?error=unable-to-save-product-relations");
+  }
+
   refreshApp();
-  redirect("/stock");
+  redirect(`/products/${data.id}`);
 }
 
 export async function updateProductAction(formData: FormData) {
   const productId = getNumber(formData, "product_id");
   const name = getText(formData, "name");
   const category = getText(formData, "category") || "Mystery Scoop";
+  const categoryId = asNullablePositiveInteger(getOptionalNumber(formData, "category_id"));
   const unitCost = Math.max(0, getNumber(formData, "unit_cost"));
+  const slug = slugifyRoute(getText(formData, "slug") || name);
+  const description = getText(formData, "description") || null;
+  const basePrice = Math.max(0, getOptionalNumber(formData, "base_price") ?? 0);
+  const primaryImageUrl = getText(formData, "primary_image_url") || null;
+  const active = getBooleanInput(formData, "active", true);
+  const colourText = getText(formData, "available_colours");
+  const collectionIds = getNumberList(formData, "collection_ids");
+  const galleryImages = getTextLines(formData, "gallery_images");
+  const availableColours = colourText
+    ? colourText
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
 
   if (!productId || !name) {
     redirect("/stock?error=invalid-product-update");
   }
 
   const supabase = getSupabase();
-  const { error } = await supabase
+  let { error } = await supabase
     .from("products")
     .update({
       name,
+      slug,
       category,
+      category_id: categoryId,
+      description,
+      base_price: basePrice,
+      primary_image_url: primaryImageUrl,
+      active,
+      available_colours: availableColours,
       unit_cost: unitCost,
       updated_at: getIsoTimestamp(),
     })
     .eq("id", productId);
 
+  if (
+    error?.message.includes("slug") ||
+    error?.message.includes("base_price") ||
+    error?.message.includes("available_colours")
+  ) {
+    const retryResult = await supabase
+      .from("products")
+      .update({
+        name,
+        category,
+        category_id: categoryId,
+        unit_cost: unitCost,
+        updated_at: getIsoTimestamp(),
+      })
+      .eq("id", productId);
+
+    error = retryResult.error;
+  }
+
   if (error) {
     redirect("/stock?error=unable-to-update-product");
   }
 
+  try {
+    await syncProductCollections(productId, collectionIds);
+    await syncProductImages(productId, primaryImageUrl, galleryImages);
+  } catch {
+    redirect(`/products/${productId}?error=unable-to-save-product-relations`);
+  }
+
   refreshApp();
-  redirect(`/stock/${productId}`);
+  redirect(`/products/${productId}`);
 }
 
 export async function deleteProductAction(formData: FormData) {
@@ -591,6 +783,340 @@ export async function updateScoopPricesAction(formData: FormData) {
 
   refreshApp();
   redirect("/stock");
+}
+
+export async function createCategoryAction(formData: FormData) {
+  const name = getText(formData, "name");
+  const slug = slugifyRoute(getText(formData, "slug") || name);
+  const sortOrder = Math.max(0, getNumber(formData, "sort_order"));
+  const active = getBooleanInput(formData, "active", true);
+
+  if (!name) {
+    redirect("/categories?error=missing-category-name");
+  }
+
+  const { error } = await getSupabase().from("categories").insert({
+    name,
+    slug,
+    sort_order: sortOrder,
+    active,
+  });
+
+  if (error) {
+    redirect("/categories?error=unable-to-create-category");
+  }
+
+  refreshApp();
+  redirect("/categories");
+}
+
+export async function updateCategoryAction(formData: FormData) {
+  const categoryId = getNumber(formData, "category_id");
+  const name = getText(formData, "name");
+  const slug = slugifyRoute(getText(formData, "slug") || name);
+  const sortOrder = Math.max(0, getNumber(formData, "sort_order"));
+  const active = getBooleanInput(formData, "active", true);
+
+  if (!categoryId || !name) {
+    redirect("/categories?error=invalid-category-update");
+  }
+
+  const { error } = await getSupabase()
+    .from("categories")
+    .update({ name, slug, sort_order: sortOrder, active })
+    .eq("id", categoryId);
+
+  if (error) {
+    redirect("/categories?error=unable-to-update-category");
+  }
+
+  refreshApp();
+  redirect("/categories");
+}
+
+export async function deleteCategoryAction(formData: FormData) {
+  const categoryId = getNumber(formData, "category_id");
+
+  if (!categoryId) {
+    redirect("/categories?error=invalid-category-delete");
+  }
+
+  const supabase = getSupabase();
+  await supabase.from("products").update({ category_id: null }).eq("category_id", categoryId);
+  const { error } = await supabase.from("categories").delete().eq("id", categoryId);
+
+  if (error) {
+    redirect("/categories?error=unable-to-delete-category");
+  }
+
+  refreshApp();
+  redirect("/categories");
+}
+
+export async function createCollectionAction(formData: FormData) {
+  const name = getText(formData, "name");
+  const slug = slugifyRoute(getText(formData, "slug") || name);
+  const sortOrder = Math.max(0, getNumber(formData, "sort_order"));
+  const active = getBooleanInput(formData, "active", true);
+
+  if (!name) {
+    redirect("/collections?error=missing-collection-name");
+  }
+
+  const { error } = await getSupabase().from("collections").insert({
+    name,
+    slug,
+    sort_order: sortOrder,
+    active,
+  });
+
+  if (error) {
+    redirect("/collections?error=unable-to-create-collection");
+  }
+
+  refreshApp();
+  redirect("/collections");
+}
+
+export async function updateCollectionAction(formData: FormData) {
+  const collectionId = getNumber(formData, "collection_id");
+  const name = getText(formData, "name");
+  const slug = slugifyRoute(getText(formData, "slug") || name);
+  const sortOrder = Math.max(0, getNumber(formData, "sort_order"));
+  const active = getBooleanInput(formData, "active", true);
+
+  if (!collectionId || !name) {
+    redirect("/collections?error=invalid-collection-update");
+  }
+
+  const { error } = await getSupabase()
+    .from("collections")
+    .update({ name, slug, sort_order: sortOrder, active })
+    .eq("id", collectionId);
+
+  if (error) {
+    redirect("/collections?error=unable-to-update-collection");
+  }
+
+  refreshApp();
+  redirect("/collections");
+}
+
+export async function deleteCollectionAction(formData: FormData) {
+  const collectionId = getNumber(formData, "collection_id");
+
+  if (!collectionId) {
+    redirect("/collections?error=invalid-collection-delete");
+  }
+
+  const supabase = getSupabase();
+  await supabase.from("product_collections").delete().eq("collection_id", collectionId);
+  const { error } = await supabase.from("collections").delete().eq("id", collectionId);
+
+  if (error) {
+    redirect("/collections?error=unable-to-delete-collection");
+  }
+
+  refreshApp();
+  redirect("/collections");
+}
+
+export async function createDiscountAction(formData: FormData) {
+  const targetType = getText(formData, "target_type");
+  const targetId = getNumber(formData, "target_id");
+  const amount = Math.max(0, getNumber(formData, "amount"));
+  const type = getText(formData, "type");
+  const startAt = getText(formData, "start_at");
+  const endAt = getText(formData, "end_at");
+  const active = getText(formData, "active") !== "false";
+
+  if (!targetType || !targetId || !amount || !type) {
+    redirect("/discounts?error=missing-discount-fields");
+  }
+
+  const { error } = await getSupabase().from("discounts").insert({
+    target_type: targetType,
+    target_id: targetId,
+    amount,
+    type,
+    start_at: startAt || null,
+    end_at: endAt || null,
+    active,
+  });
+
+  if (error) {
+    redirect("/discounts?error=unable-to-create-discount");
+  }
+
+  refreshApp();
+  redirect("/discounts");
+}
+
+export async function updateDiscountAction(formData: FormData) {
+  const discountId = getNumber(formData, "discount_id");
+  const amount = Math.max(0, getNumber(formData, "amount"));
+  const type = getText(formData, "type");
+  const startAt = getText(formData, "start_at");
+  const endAt = getText(formData, "end_at");
+  const active = getText(formData, "active") !== "false";
+
+  if (!discountId || !amount || !type) {
+    redirect("/discounts?error=invalid-discount-update");
+  }
+
+  const { error } = await getSupabase()
+    .from("discounts")
+    .update({
+      amount,
+      type,
+      start_at: startAt || null,
+      end_at: endAt || null,
+      active,
+    })
+    .eq("id", discountId);
+
+  if (error) {
+    redirect("/discounts?error=unable-to-update-discount");
+  }
+
+  refreshApp();
+  redirect("/discounts");
+}
+
+export async function deleteDiscountAction(formData: FormData) {
+  const discountId = getNumber(formData, "discount_id");
+
+  if (!discountId) {
+    redirect("/discounts?error=invalid-discount-delete");
+  }
+
+  const { error } = await getSupabase().from("discounts").delete().eq("id", discountId);
+
+  if (error) {
+    redirect("/discounts?error=unable-to-delete-discount");
+  }
+
+  refreshApp();
+  redirect("/discounts");
+}
+
+export async function uploadProductImageAction(formData: FormData) {
+  const productId = getNumber(formData, "product_id");
+  const makePrimary = getBooleanInput(formData, "make_primary", false);
+  const imageFile = formData.get("image");
+
+  if (!productId || !(imageFile instanceof File) || imageFile.size === 0) {
+    redirect(`/products/${productId || ""}?error=missing-image-file`);
+  }
+
+  const allowedTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
+  if (!allowedTypes.has(imageFile.type)) {
+    redirect(`/products/${productId}?error=invalid-image-type`);
+  }
+
+  const product = await fetchProductsByIds([productId]).then((rows) => rows[0]);
+
+  if (!product) {
+    redirect("/products?error=invalid-product-upload");
+  }
+
+  const pathSafeName = imageFile.name.replace(/[^a-zA-Z0-9._-]+/g, "-");
+  const objectPath = `${productId}/${Date.now()}-${pathSafeName}`;
+  const supabase = getSupabase();
+  const fileBuffer = await imageFile.arrayBuffer();
+  const { error: uploadError } = await supabase.storage
+    .from("product-images")
+    .upload(objectPath, fileBuffer, {
+      contentType: imageFile.type,
+      upsert: false,
+    });
+
+  if (uploadError) {
+    redirect(`/products/${productId}?error=unable-to-upload-image`);
+  }
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from("product-images").getPublicUrl(objectPath);
+
+  const [{ data: existingImages, error: imagesError }, updateProductResult] = await Promise.all([
+    supabase
+      .from("product_images")
+      .select("sort_order")
+      .eq("product_id", productId)
+      .order("sort_order", { ascending: false })
+      .limit(1),
+    makePrimary
+      ? supabase
+          .from("products")
+          .update({
+            primary_image_url: publicUrl,
+            updated_at: getIsoTimestamp(),
+          })
+          .eq("id", productId)
+      : Promise.resolve({ error: null }),
+  ]);
+
+  if (imagesError || updateProductResult.error) {
+    redirect(`/products/${productId}?error=unable-to-save-image`);
+  }
+
+  const nextSortOrder = Number(existingImages?.[0]?.sort_order ?? -1) + 1;
+  const { error: insertError } = await supabase.from("product_images").insert({
+    product_id: productId,
+    url: publicUrl,
+    alt_text: null,
+    sort_order: nextSortOrder,
+  });
+
+  if (insertError) {
+    redirect(`/products/${productId}?error=unable-to-save-image`);
+  }
+
+  refreshApp();
+  redirect(`/products/${productId}`);
+}
+
+export async function deleteProductImageAction(formData: FormData) {
+  const productId = getNumber(formData, "product_id");
+  const imageId = getNumber(formData, "image_id");
+  const imageUrl = getText(formData, "image_url");
+  const primaryImageUrl = getText(formData, "primary_image_url");
+
+  if (!productId || !imageId || !imageUrl) {
+    redirect(`/products/${productId || ""}?error=invalid-image-delete`);
+  }
+
+  const supabase = getSupabase();
+  const storagePath = parseStoragePathFromPublicUrl(imageUrl);
+
+  if (storagePath) {
+    await supabase.storage.from("product-images").remove([storagePath]);
+  }
+
+  const { error: deleteError } = await supabase
+    .from("product_images")
+    .delete()
+    .eq("id", imageId)
+    .eq("product_id", productId);
+
+  if (deleteError) {
+    redirect(`/products/${productId}?error=unable-to-delete-image`);
+  }
+
+  if (primaryImageUrl && primaryImageUrl === imageUrl) {
+    await supabase
+      .from("products")
+      .update({
+        primary_image_url: null,
+        updated_at: getIsoTimestamp(),
+      })
+      .eq("id", productId);
+  }
+
+  refreshApp();
+  redirect(`/products/${productId}`);
 }
 
 export async function createExpenseAction(formData: FormData) {

@@ -1,12 +1,68 @@
 export type Product = {
   id: number;
   name: string;
+  sku: string;
+  slug: string;
   category: string;
+  category_id: number | null;
+  description: string | null;
+  base_price: number;
+  active: boolean;
+  primary_image_url: string | null;
+  available_colours: string[];
+  sort_order: number;
   total_purchased_quantity: number;
   stock_quantity: number;
   unit_cost: number;
   created_at: string;
   updated_at: string;
+};
+
+export type Category = {
+  id: number;
+  name: string;
+  slug: string;
+  active: boolean;
+  sort_order: number;
+  created_at: string;
+};
+
+export type Collection = {
+  id: number;
+  name: string;
+  slug: string;
+  active: boolean;
+  sort_order: number;
+  created_at: string;
+};
+
+export type ProductImage = {
+  id: number;
+  product_id: number;
+  url: string;
+  alt_text: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type Discount = {
+  id: number;
+  target_type: "product" | "category" | "collection";
+  target_id: number;
+  amount: number;
+  type: "fixed" | "percent";
+  start_at: string | null;
+  end_at: string | null;
+  active: boolean;
+  created_at: string;
+};
+
+export type CatalogProduct = Product & {
+  category_record: Category | null;
+  collections: Collection[];
+  images: ProductImage[];
+  active_discount: Discount | null;
+  effective_price: number;
 };
 
 export type ScoopType = {
