@@ -6,6 +6,8 @@ import type { CatalogProduct, Category, Collection } from "@/lib/types";
 type CatalogProductFormProps = {
   action: (formData: FormData) => void | Promise<void>;
   categories: Category[];
+  cancelHref?: string;
+  cancelLabel?: string;
   collections: Collection[];
   product?: CatalogProduct | null;
   submitLabel: string;
@@ -15,6 +17,8 @@ type CatalogProductFormProps = {
 export function CatalogProductForm({
   action,
   categories,
+  cancelHref = "/stock",
+  cancelLabel = "Back to stock",
   collections,
   product,
   submitLabel,
@@ -23,6 +27,11 @@ export function CatalogProductForm({
   return (
     <form action={action} className="grid gap-4">
       {product ? <input type="hidden" name="product_id" value={product.id} /> : null}
+      <input
+        type="hidden"
+        name="available_colours"
+        value={product?.available_colours.join("\n") ?? ""}
+      />
 
       <div className="grid gap-4 md:grid-cols-2">
         <label className="block">
@@ -59,18 +68,32 @@ export function CatalogProductForm({
         />
       </label>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <label className="block">
-          <span className="mb-2 block text-sm font-medium text-stone-700">Base price</span>
+          <span className="mb-2 block text-sm font-medium text-stone-700">Frontend name</span>
+          <input
+            type="text"
+            name="view_name"
+            defaultValue={product?.view_name ?? ""}
+            className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
+            placeholder="Cute Avocado Eraser"
+          />
+        </label>
+
+        <label className="block">
+          <span className="mb-2 block text-sm font-medium text-stone-700">Selling price</span>
           <input
             type="number"
-            name="base_price"
+            name="selling_price"
             min="0"
             step="0.01"
-            defaultValue={product ? String(product.base_price) : "0"}
+            defaultValue={product ? String(product.selling_price) : "0"}
             className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
           />
         </label>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
 
         <label className="block">
           <span className="mb-2 block text-sm font-medium text-stone-700">Latest cost</span>
@@ -130,43 +153,21 @@ export function CatalogProductForm({
               </option>
             ))}
           </select>
+          <p className="mt-2 text-xs text-stone-500">
+            Hold Command on Mac to select multiple collections.
+          </p>
         </label>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <label className="block">
-          <span className="mb-2 block text-sm font-medium text-stone-700">Primary image URL</span>
-          <input
-            type="url"
-            name="primary_image_url"
-            defaultValue={product?.primary_image_url ?? ""}
-            className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
-            placeholder="https://..."
-          />
-        </label>
-
-        <label className="block">
-          <span className="mb-2 block text-sm font-medium text-stone-700">Colours</span>
-          <input
-            type="text"
-            name="available_colours"
-            defaultValue={product?.available_colours.join(", ") ?? ""}
-            className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
-            placeholder="Pink, Mint, Lilac"
-          />
-        </label>
-      </div>
-
-      <label className="block">
-        <span className="mb-2 block text-sm font-medium text-stone-700">Gallery image URLs</span>
-        <textarea
-          name="gallery_images"
-          rows={5}
-          defaultValue={product?.images.map((image) => image.url).join("\n") ?? ""}
-          className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
-          placeholder={"One image URL per line"}
-        />
-      </label>
+      {product?.available_colours.length ? (
+        <div className="rounded-[1.25rem] border border-stone-200 bg-stone-50/70 px-4 py-4 text-sm text-stone-700">
+          <p className="font-medium text-stone-900">Saved colours</p>
+          <p className="mt-2">{product.available_colours.join(", ")}</p>
+          <p className="mt-2 text-xs text-stone-500">
+            Add or remove colour images from the side panel on the Stock edit page.
+          </p>
+        </div>
+      ) : null}
 
       <label className="flex items-center gap-3 rounded-[1.25rem] border border-stone-200 bg-stone-50/70 px-4 py-4 text-sm text-stone-700">
         <input
@@ -192,10 +193,10 @@ export function CatalogProductForm({
           {submitLabel}
         </SubmitButton>
         <Link
-          href="/products"
+          href={cancelHref}
           className="inline-flex rounded-full border border-stone-300 px-4 py-3 text-sm font-semibold text-stone-700 transition hover:border-stone-950 hover:text-stone-950"
         >
-          Back to products
+          {cancelLabel}
         </Link>
       </div>
     </form>

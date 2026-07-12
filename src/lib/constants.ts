@@ -35,7 +35,6 @@ export const manualExpenseCategoryLabels = {
 
 export const navItems = [
   { href: "/", label: "Dashboard" },
-  { href: "/products", label: "Products" },
   { href: "/categories", label: "Categories" },
   { href: "/collections", label: "Collections" },
   { href: "/discounts", label: "Discounts" },

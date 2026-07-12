@@ -221,41 +221,50 @@ async function syncProductCollections(productId: number, collectionIds: number[]
   }
 }
 
-async function syncProductImages(productId: number, primaryImageUrl: string | null, galleryImages: string[]) {
-  const supabase = getSupabase();
-  const uniqueImages = Array.from(
-    new Set([primaryImageUrl, ...galleryImages].filter((value): value is string => Boolean(value))),
-  );
-
-  const { error: deleteError } = await supabase
-    .from("product_images")
-    .delete()
-    .eq("product_id", productId);
-
-  if (deleteError) {
-    throw new Error(`Unable to clear product images: ${deleteError.message}`);
-  }
-
-  if (uniqueImages.length === 0) {
-    return;
-  }
-
-  const { error: insertError } = await supabase.from("product_images").insert(
-    uniqueImages.map((url, index) => ({
-      product_id: productId,
-      url,
-      alt_text: null,
-      sort_order: index,
-    })),
-  );
-
-  if (insertError) {
-    throw new Error(`Unable to save product images: ${insertError.message}`);
-  }
-}
-
 function hasMissingTotalPurchasedColumnError(error: { message: string } | null) {
   return Boolean(error?.message.includes("total_purchased_quantity"));
+}
+
+function hasMissingColumnError(error: { message: string } | null, column: string) {
+  return Boolean(error?.message.includes(column));
+}
+
+function buildProductImageDebugParams(input: {
+  error: string;
+  step?: string;
+  detail?: string;
+  bucket?: string;
+  objectPath?: string;
+}) {
+  const params = new URLSearchParams({ error: input.error });
+
+  if (input.step) {
+    params.set("step", input.step);
+  }
+
+  if (input.detail) {
+    params.set("detail", input.detail.slice(0, 180));
+  }
+
+  if (input.bucket) {
+    params.set("bucket", input.bucket);
+  }
+
+  if (input.objectPath) {
+    params.set("objectPath", input.objectPath);
+  }
+
+  return params.toString();
+}
+
+function normalizeColourList(colours: string[]) {
+  return Array.from(
+    new Set(
+      colours
+        .map((colour) => colour.trim())
+        .filter(Boolean),
+    ),
+  );
 }
 
 function countsTowardPurchasedTotal(reason: string) {
@@ -472,18 +481,10 @@ export async function createProductAction(formData: FormData) {
   const initialStock = Math.max(0, getNumber(formData, "stock_quantity"));
   const unitCost = Math.max(0, getNumber(formData, "unit_cost"));
   const slug = slugifyRoute(getText(formData, "slug") || name);
+  const viewName = getText(formData, "view_name") || null;
   const description = getText(formData, "description") || null;
-  const basePrice = Math.max(0, getOptionalNumber(formData, "base_price") ?? 0);
-  const primaryImageUrl = getText(formData, "primary_image_url") || null;
-  const colourText = getText(formData, "available_colours");
+  const sellingPrice = Math.max(0, getOptionalNumber(formData, "selling_price") ?? 0);
   const collectionIds = getNumberList(formData, "collection_ids");
-  const galleryImages = getTextLines(formData, "gallery_images");
-  const availableColours = colourText
-    ? colourText
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean)
-    : [];
   const active = getBooleanInput(formData, "active", true);
 
   if (!name) {
@@ -500,20 +501,26 @@ export async function createProductAction(formData: FormData) {
       slug,
       category,
       category_id: categoryId,
-      description,
-      base_price: basePrice,
-      active,
-      primary_image_url: primaryImageUrl,
-      available_colours: availableColours,
-      sort_order: 0,
-      total_purchased_quantity: initialStock,
-      stock_quantity: initialStock,
+        view_name: viewName,
+        description,
+        base_price: sellingPrice,
+        selling_price: sellingPrice,
+        active,
+        primary_image_url: null,
+        available_colours: [],
+        sort_order: 0,
+        total_purchased_quantity: initialStock,
+        stock_quantity: initialStock,
       unit_cost: unitCost,
     })
     .select("id")
     .single();
 
-  if (hasMissingTotalPurchasedColumnError(error)) {
+  if (
+    hasMissingTotalPurchasedColumnError(error) ||
+    hasMissingColumnError(error, "selling_price") ||
+    hasMissingColumnError(error, "view_name")
+  ) {
     const retryResult = await supabase
       .from("products")
       .insert({
@@ -522,6 +529,8 @@ export async function createProductAction(formData: FormData) {
         slug,
         category,
         category_id: categoryId,
+        description,
+        base_price: sellingPrice,
         stock_quantity: initialStock,
         unit_cost: unitCost,
       })
@@ -551,13 +560,12 @@ export async function createProductAction(formData: FormData) {
 
   try {
     await syncProductCollections(Number(data.id), collectionIds);
-    await syncProductImages(Number(data.id), primaryImageUrl, galleryImages);
   } catch {
-    redirect("/products?error=unable-to-save-product-relations");
+    redirect("/stock?error=unable-to-save-product-relations");
   }
 
   refreshApp();
-  redirect(`/products/${data.id}`);
+  redirect(`/stock/${data.id}`);
 }
 
 export async function updateProductAction(formData: FormData) {
@@ -567,19 +575,12 @@ export async function updateProductAction(formData: FormData) {
   const categoryId = asNullablePositiveInteger(getOptionalNumber(formData, "category_id"));
   const unitCost = Math.max(0, getNumber(formData, "unit_cost"));
   const slug = slugifyRoute(getText(formData, "slug") || name);
+  const viewName = getText(formData, "view_name") || null;
   const description = getText(formData, "description") || null;
-  const basePrice = Math.max(0, getOptionalNumber(formData, "base_price") ?? 0);
-  const primaryImageUrl = getText(formData, "primary_image_url") || null;
+  const sellingPrice = Math.max(0, getOptionalNumber(formData, "selling_price") ?? 0);
   const active = getBooleanInput(formData, "active", true);
-  const colourText = getText(formData, "available_colours");
   const collectionIds = getNumberList(formData, "collection_ids");
-  const galleryImages = getTextLines(formData, "gallery_images");
-  const availableColours = colourText
-    ? colourText
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean)
-    : [];
+  const existingColours = getTextLines(formData, "available_colours");
 
   if (!productId || !name) {
     redirect("/stock?error=invalid-product-update");
@@ -593,11 +594,12 @@ export async function updateProductAction(formData: FormData) {
       slug,
       category,
       category_id: categoryId,
+      view_name: viewName,
       description,
-      base_price: basePrice,
-      primary_image_url: primaryImageUrl,
+      base_price: sellingPrice,
+      selling_price: sellingPrice,
       active,
-      available_colours: availableColours,
+      available_colours: existingColours,
       unit_cost: unitCost,
       updated_at: getIsoTimestamp(),
     })
@@ -606,7 +608,9 @@ export async function updateProductAction(formData: FormData) {
   if (
     error?.message.includes("slug") ||
     error?.message.includes("base_price") ||
-    error?.message.includes("available_colours")
+    error?.message.includes("available_colours") ||
+    error?.message.includes("selling_price") ||
+    error?.message.includes("view_name")
   ) {
     const retryResult = await supabase
       .from("products")
@@ -614,6 +618,12 @@ export async function updateProductAction(formData: FormData) {
         name,
         category,
         category_id: categoryId,
+        view_name: viewName,
+        base_price: sellingPrice,
+        selling_price: sellingPrice,
+        description,
+        active,
+        available_colours: existingColours,
         unit_cost: unitCost,
         updated_at: getIsoTimestamp(),
       })
@@ -628,13 +638,12 @@ export async function updateProductAction(formData: FormData) {
 
   try {
     await syncProductCollections(productId, collectionIds);
-    await syncProductImages(productId, primaryImageUrl, galleryImages);
   } catch {
-    redirect(`/products/${productId}?error=unable-to-save-product-relations`);
+    redirect(`/stock/${productId}?error=unable-to-save-product-relations`);
   }
 
   refreshApp();
-  redirect(`/products/${productId}`);
+  redirect(`/stock/${productId}`);
 }
 
 export async function deleteProductAction(formData: FormData) {
@@ -856,6 +865,7 @@ export async function deleteCategoryAction(formData: FormData) {
 export async function createCollectionAction(formData: FormData) {
   const name = getText(formData, "name");
   const slug = slugifyRoute(getText(formData, "slug") || name);
+  const description = getText(formData, "description") || null;
   const sortOrder = Math.max(0, getNumber(formData, "sort_order"));
   const active = getBooleanInput(formData, "active", true);
 
@@ -863,12 +873,25 @@ export async function createCollectionAction(formData: FormData) {
     redirect("/collections?error=missing-collection-name");
   }
 
-  const { error } = await getSupabase().from("collections").insert({
+  const supabase = getSupabase();
+  let { error } = await supabase.from("collections").insert({
     name,
     slug,
+    description,
     sort_order: sortOrder,
     active,
   });
+
+  if (hasMissingColumnError(error, "description")) {
+    const fallbackResult = await supabase.from("collections").insert({
+      name,
+      slug,
+      sort_order: sortOrder,
+      active,
+    });
+
+    error = fallbackResult.error;
+  }
 
   if (error) {
     redirect("/collections?error=unable-to-create-collection");
@@ -882,6 +905,7 @@ export async function updateCollectionAction(formData: FormData) {
   const collectionId = getNumber(formData, "collection_id");
   const name = getText(formData, "name");
   const slug = slugifyRoute(getText(formData, "slug") || name);
+  const description = getText(formData, "description") || null;
   const sortOrder = Math.max(0, getNumber(formData, "sort_order"));
   const active = getBooleanInput(formData, "active", true);
 
@@ -889,10 +913,20 @@ export async function updateCollectionAction(formData: FormData) {
     redirect("/collections?error=invalid-collection-update");
   }
 
-  const { error } = await getSupabase()
+  const supabase = getSupabase();
+  let { error } = await supabase
     .from("collections")
-    .update({ name, slug, sort_order: sortOrder, active })
+    .update({ name, slug, description, sort_order: sortOrder, active })
     .eq("id", collectionId);
+
+  if (hasMissingColumnError(error, "description")) {
+    const fallbackResult = await supabase
+      .from("collections")
+      .update({ name, slug, sort_order: sortOrder, active })
+      .eq("id", collectionId);
+
+    error = fallbackResult.error;
+  }
 
   if (error) {
     redirect("/collections?error=unable-to-update-collection");
@@ -1002,43 +1036,74 @@ export async function deleteDiscountAction(formData: FormData) {
 
 export async function uploadProductImageAction(formData: FormData) {
   const productId = getNumber(formData, "product_id");
+  const colourName = getText(formData, "colour_name");
   const makePrimary = getBooleanInput(formData, "make_primary", false);
   const imageFile = formData.get("image");
+  const bucket = "product-images";
 
-  if (!productId || !(imageFile instanceof File) || imageFile.size === 0) {
-    redirect(`/products/${productId || ""}?error=missing-image-file`);
+  if (!productId || !colourName || !(imageFile instanceof File) || imageFile.size === 0) {
+    redirect(`/stock/${productId || ""}?error=missing-image-file`);
   }
 
   const allowedTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
   if (!allowedTypes.has(imageFile.type)) {
-    redirect(`/products/${productId}?error=invalid-image-type`);
+    redirect(`/stock/${productId}?error=invalid-image-type`);
   }
 
-  const product = await fetchProductsByIds([productId]).then((rows) => rows[0]);
+  const { data: product, error: productError } = await getSupabase()
+    .from("products")
+    .select("id, available_colours")
+    .eq("id", productId)
+    .maybeSingle();
 
-  if (!product) {
-    redirect("/products?error=invalid-product-upload");
+  if (productError || !product) {
+    redirect("/stock?error=invalid-product-upload");
   }
 
   const pathSafeName = imageFile.name.replace(/[^a-zA-Z0-9._-]+/g, "-");
   const objectPath = `${productId}/${Date.now()}-${pathSafeName}`;
   const supabase = getSupabase();
   const fileBuffer = await imageFile.arrayBuffer();
+  console.info("[product-image-upload] starting", {
+    productId,
+    colourName,
+    makePrimary,
+    bucket,
+    objectPath,
+    fileName: imageFile.name,
+    fileType: imageFile.type,
+    fileSize: imageFile.size,
+  });
   const { error: uploadError } = await supabase.storage
-    .from("product-images")
+    .from(bucket)
     .upload(objectPath, fileBuffer, {
       contentType: imageFile.type,
       upsert: false,
     });
 
   if (uploadError) {
-    redirect(`/products/${productId}?error=unable-to-upload-image`);
+    console.error("[product-image-upload] storage upload failed", {
+      productId,
+      colourName,
+      bucket,
+      objectPath,
+      message: uploadError.message,
+    });
+    redirect(
+      `/stock/${productId}?${buildProductImageDebugParams({
+        error: "unable-to-upload-image",
+        step: "storage-upload",
+        detail: uploadError.message,
+        bucket,
+        objectPath,
+      })}`,
+    );
   }
 
   const {
     data: { publicUrl },
-  } = supabase.storage.from("product-images").getPublicUrl(objectPath);
+  } = supabase.storage.from(bucket).getPublicUrl(objectPath);
 
   const [{ data: existingImages, error: imagesError }, updateProductResult] = await Promise.all([
     supabase
@@ -1059,33 +1124,108 @@ export async function uploadProductImageAction(formData: FormData) {
   ]);
 
   if (imagesError || updateProductResult.error) {
-    redirect(`/products/${productId}?error=unable-to-save-image`);
+    const detail = imagesError?.message ?? updateProductResult.error?.message ?? "Unknown save error";
+    console.error("[product-image-upload] unable to prepare database save", {
+      productId,
+      colourName,
+      bucket,
+      objectPath,
+      publicUrl,
+      message: detail,
+    });
+    redirect(
+      `/stock/${productId}?${buildProductImageDebugParams({
+        error: "unable-to-save-image",
+        step: "prepare-database-save",
+        detail,
+        bucket,
+        objectPath,
+      })}`,
+    );
   }
 
   const nextSortOrder = Number(existingImages?.[0]?.sort_order ?? -1) + 1;
   const { error: insertError } = await supabase.from("product_images").insert({
     product_id: productId,
     url: publicUrl,
-    alt_text: null,
+    alt_text: colourName,
     sort_order: nextSortOrder,
   });
 
   if (insertError) {
-    redirect(`/products/${productId}?error=unable-to-save-image`);
+    console.error("[product-image-upload] product_images insert failed", {
+      productId,
+      colourName,
+      bucket,
+      objectPath,
+      publicUrl,
+      message: insertError.message,
+    });
+    redirect(
+      `/stock/${productId}?${buildProductImageDebugParams({
+        error: "unable-to-save-image",
+        step: "insert-product-image-record",
+        detail: insertError.message,
+        bucket,
+        objectPath,
+      })}`,
+    );
   }
 
+  const currentColours = Array.isArray(product.available_colours)
+    ? product.available_colours.map((value) => String(value))
+    : [];
+  const nextColours = normalizeColourList([...currentColours, colourName]);
+  const { error: coloursError } = await supabase
+    .from("products")
+    .update({
+      available_colours: nextColours,
+      updated_at: getIsoTimestamp(),
+    })
+    .eq("id", productId);
+
+  if (coloursError) {
+    console.error("[product-image-upload] product colour list update failed", {
+      productId,
+      colourName,
+      bucket,
+      objectPath,
+      publicUrl,
+      message: coloursError.message,
+    });
+    redirect(
+      `/stock/${productId}?${buildProductImageDebugParams({
+        error: "unable-to-save-image",
+        step: "update-product-colours",
+        detail: coloursError.message,
+        bucket,
+        objectPath,
+      })}`,
+    );
+  }
+
+  console.info("[product-image-upload] completed", {
+    productId,
+    colourName,
+    bucket,
+    objectPath,
+    publicUrl,
+    nextSortOrder,
+    makePrimary,
+  });
   refreshApp();
-  redirect(`/products/${productId}`);
+  redirect(`/stock/${productId}`);
 }
 
 export async function deleteProductImageAction(formData: FormData) {
   const productId = getNumber(formData, "product_id");
   const imageId = getNumber(formData, "image_id");
   const imageUrl = getText(formData, "image_url");
+  const imageColour = getText(formData, "image_colour");
   const primaryImageUrl = getText(formData, "primary_image_url");
 
   if (!productId || !imageId || !imageUrl) {
-    redirect(`/products/${productId || ""}?error=invalid-image-delete`);
+    redirect(`/stock/${productId || ""}?error=invalid-image-delete`);
   }
 
   const supabase = getSupabase();
@@ -1102,7 +1242,7 @@ export async function deleteProductImageAction(formData: FormData) {
     .eq("product_id", productId);
 
   if (deleteError) {
-    redirect(`/products/${productId}?error=unable-to-delete-image`);
+    redirect(`/stock/${productId}?error=unable-to-delete-image`);
   }
 
   if (primaryImageUrl && primaryImageUrl === imageUrl) {
@@ -1115,8 +1255,37 @@ export async function deleteProductImageAction(formData: FormData) {
       .eq("id", productId);
   }
 
+  if (imageColour) {
+    const { data: remainingImages, error: remainingImagesError } = await supabase
+      .from("product_images")
+      .select("alt_text")
+      .eq("product_id", productId);
+
+    if (remainingImagesError) {
+      redirect(`/stock/${productId}?error=unable-to-delete-image`);
+    }
+
+    const nextColours = normalizeColourList(
+      (remainingImages ?? [])
+        .map((row) => String(row.alt_text ?? ""))
+        .filter(Boolean),
+    );
+
+    const { error: coloursError } = await supabase
+      .from("products")
+      .update({
+        available_colours: nextColours,
+        updated_at: getIsoTimestamp(),
+      })
+      .eq("id", productId);
+
+    if (coloursError) {
+      redirect(`/stock/${productId}?error=unable-to-delete-image`);
+    }
+  }
+
   refreshApp();
-  redirect(`/products/${productId}`);
+  redirect(`/stock/${productId}`);
 }
 
 export async function createExpenseAction(formData: FormData) {

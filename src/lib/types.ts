@@ -7,6 +7,8 @@ export type Product = {
   category_id: number | null;
   description: string | null;
   base_price: number;
+  selling_price: number;
+  view_name: string | null;
   active: boolean;
   primary_image_url: string | null;
   available_colours: string[];
@@ -31,6 +33,7 @@ export type Collection = {
   id: number;
   name: string;
   slug: string;
+  description: string | null;
   active: boolean;
   sort_order: number;
   created_at: string;

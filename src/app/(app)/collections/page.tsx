@@ -19,7 +19,7 @@ export default async function CollectionsPage() {
       <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <Surface
           title="Add collection"
-          description="Collections power themed storefront sections and can overlap with categories."
+          description="Each active collection can become its own homepage section on the website. Add a short description to control the text under that section title."
         >
           <form action={createCollectionAction} className="grid gap-4">
             <label className="block">
@@ -38,6 +38,15 @@ export default async function CollectionsPage() {
                 name="slug"
                 className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
                 placeholder="leave blank to auto-generate"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-stone-700">Homepage description</span>
+              <textarea
+                name="description"
+                rows={3}
+                className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
+                placeholder="Short line shown under the collection title on the homepage"
               />
             </label>
             <label className="block">
@@ -66,7 +75,7 @@ export default async function CollectionsPage() {
 
         <Surface
           title="Existing collections"
-          description="Collections can be reused across multiple products, so each row shows how many current catalog items are linked."
+          description="Collections can be reused across multiple products, and the sort order controls the sequence of homepage sections."
         >
           <div className="space-y-4">
             {collections.length > 0 ? (
@@ -100,6 +109,13 @@ export default async function CollectionsPage() {
                           className="w-full rounded-[1.1rem] border border-stone-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-stone-950"
                         />
                       </div>
+                      <textarea
+                        name="description"
+                        rows={3}
+                        defaultValue={collection.description ?? ""}
+                        className="w-full rounded-[1.1rem] border border-stone-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-stone-950"
+                        placeholder="Short line shown under the collection title on the homepage"
+                      />
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <label className="flex items-center gap-3 text-sm text-stone-700">
                           <input type="hidden" name="active" value="false" />

@@ -14,7 +14,7 @@ declare global {
 function assertSupabaseConfig() {
   if (!supabaseUrl || !supabaseKey) {
     throw new Error(
-      "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.",
+      "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and either SUPABASE_SECRET_KEY or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.",
     );
   }
 }

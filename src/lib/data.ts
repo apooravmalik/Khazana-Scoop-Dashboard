@@ -447,7 +447,7 @@ export async function getProducts(): Promise<Product[]> {
   const { data, error } = await supabase
     .from("products")
     .select(
-      "id, name, sku, slug, category, category_id, description, base_price, active, primary_image_url, available_colours, sort_order, total_purchased_quantity, stock_quantity, unit_cost, created_at, updated_at",
+      "id, name, sku, slug, category, category_id, description, base_price, selling_price, view_name, active, primary_image_url, available_colours, sort_order, total_purchased_quantity, stock_quantity, unit_cost, created_at, updated_at",
     )
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true })
@@ -457,7 +457,9 @@ export async function getProducts(): Promise<Product[]> {
     hasMissingTotalPurchasedColumnError(error) ||
     hasMissingColumnError(error, "slug") ||
     hasMissingColumnError(error, "base_price") ||
-    hasMissingColumnError(error, "available_colours")
+    hasMissingColumnError(error, "available_colours") ||
+    hasMissingColumnError(error, "selling_price") ||
+    hasMissingColumnError(error, "view_name")
   ) {
     const [fallbackResult, purchasedTotals] = await Promise.all([
       supabase
@@ -482,6 +484,8 @@ export async function getProducts(): Promise<Product[]> {
       category_id: null,
       description: null,
       base_price: 0,
+      selling_price: 0,
+      view_name: null,
       active: true,
       primary_image_url: null,
       available_colours: [],
@@ -500,6 +504,8 @@ export async function getProducts(): Promise<Product[]> {
     id: Number(product.id),
     category_id: product.category_id === null ? null : Number(product.category_id),
     base_price: toNumber(product.base_price),
+    selling_price: toNumber(product.selling_price),
+    view_name: product.view_name,
     available_colours: toStringArray(product.available_colours),
     sort_order: Number(product.sort_order),
     total_purchased_quantity: Number(product.total_purchased_quantity),
@@ -513,7 +519,7 @@ export async function getProductById(productId: number): Promise<Product | null>
   const { data, error } = await supabase
     .from("products")
     .select(
-      "id, name, sku, slug, category, category_id, description, base_price, active, primary_image_url, available_colours, sort_order, total_purchased_quantity, stock_quantity, unit_cost, created_at, updated_at",
+      "id, name, sku, slug, category, category_id, description, base_price, selling_price, view_name, active, primary_image_url, available_colours, sort_order, total_purchased_quantity, stock_quantity, unit_cost, created_at, updated_at",
     )
     .eq("id", productId)
     .maybeSingle();
@@ -522,7 +528,9 @@ export async function getProductById(productId: number): Promise<Product | null>
     hasMissingTotalPurchasedColumnError(error) ||
     hasMissingColumnError(error, "slug") ||
     hasMissingColumnError(error, "base_price") ||
-    hasMissingColumnError(error, "available_colours")
+    hasMissingColumnError(error, "available_colours") ||
+    hasMissingColumnError(error, "selling_price") ||
+    hasMissingColumnError(error, "view_name")
   ) {
     const [{ data: fallbackData, error: fallbackError }, purchasedTotals] = await Promise.all([
       supabase
@@ -554,6 +562,8 @@ export async function getProductById(productId: number): Promise<Product | null>
       category_id: null,
       description: null,
       base_price: 0,
+      selling_price: 0,
+      view_name: null,
       active: true,
       primary_image_url: null,
       available_colours: [],
@@ -578,6 +588,8 @@ export async function getProductById(productId: number): Promise<Product | null>
     id: Number(product.id),
     category_id: product.category_id === null ? null : Number(product.category_id),
     base_price: toNumber(product.base_price),
+    selling_price: toNumber(product.selling_price),
+    view_name: product.view_name,
     available_colours: toStringArray(product.available_colours),
     sort_order: Number(product.sort_order),
     total_purchased_quantity: Number(product.total_purchased_quantity),
@@ -602,6 +614,7 @@ function mapCollectionRecord(row: Record<string, unknown>): Collection {
     id: Number(row.id),
     name: String(row.name ?? ""),
     slug: String(row.slug ?? ""),
+    description: row.description === null ? null : String(row.description ?? ""),
     active: Boolean(row.active ?? true),
     sort_order: Number(row.sort_order ?? 0),
     created_at: String(row.created_at ?? ""),
@@ -694,7 +707,8 @@ function pickBestDiscount(
       return candidate;
     }
 
-    return applyDiscount(product.base_price, candidate) < applyDiscount(product.base_price, best)
+    return applyDiscount(product.selling_price || product.base_price, candidate) <
+      applyDiscount(product.selling_price || product.base_price, best)
       ? candidate
       : best;
   }, null);
@@ -719,9 +733,25 @@ export async function getCollections(): Promise<Collection[]> {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("collections")
-    .select("id, name, slug, active, sort_order, created_at")
+    .select("id, name, slug, description, active, sort_order, created_at")
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
+
+  if (hasMissingColumnError(error, "description")) {
+    const fallback = await supabase
+      .from("collections")
+      .select("id, name, slug, active, sort_order, created_at")
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true });
+
+    if (fallback.error) {
+      return [];
+    }
+
+    return (fallback.data ?? []).map((row) =>
+      mapCollectionRecord({ ...((row as Record<string, unknown>) ?? {}), description: null }),
+    );
+  }
 
   if (error) {
     return [];
@@ -809,7 +839,7 @@ export async function getCatalogProducts(): Promise<CatalogProduct[]> {
       collections: productCollections,
       images: imagesByProductId.get(product.id) ?? [],
       active_discount: activeDiscount,
-      effective_price: applyDiscount(product.base_price, activeDiscount),
+      effective_price: applyDiscount(product.selling_price || product.base_price, activeDiscount),
     };
   });
 }

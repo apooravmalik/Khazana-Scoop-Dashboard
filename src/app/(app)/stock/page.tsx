@@ -5,11 +5,19 @@ import {
   updateScoopPricesAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
+import { CatalogProductForm } from "@/components/catalog-product-form";
 import { ModalLauncher } from "@/components/modal-launcher";
 import { StockAdjustmentForm } from "@/components/stock-adjustment-form";
 import { SubmitButton } from "@/components/submit-button";
 import { Surface } from "@/components/surface";
-import { getProducts, getScoopTypes, getStockMovements } from "@/lib/data";
+import {
+  getCatalogProducts,
+  getCategories,
+  getCollections,
+  getProducts,
+  getScoopTypes,
+  getStockMovements,
+} from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/format";
 import Link from "next/link";
 
@@ -40,16 +48,19 @@ function formatMovementReason(reason: string) {
 
 export default async function StockPage({ searchParams }: StockPageProps) {
   const params = await searchParams;
-  const [products, movements, scoopTypes] = await Promise.all([
+  const [products, catalogProducts, categories, collections, movements, scoopTypes] = await Promise.all([
     getProducts(),
+    getCatalogProducts(),
+    getCategories(),
+    getCollections(),
     getStockMovements(),
     getScoopTypes(),
   ]);
 
   return (
     <AppShell
-      title="Stock and scoop pricing"
-      description="Set item cost and quantity for gifts, refill inventory, and edit the selling price of each scoop size from one place. If you spend money on a refill, log that separately on the Expenses page under Inventory Purchase."
+      title="Stock"
+      description="Manage the full product record from one place: stock, pricing, frontend naming, colours, categories, collections, and images. Scoop prices still control the mystery scoop order flow, while product selling prices stay on each item record."
     >
       {typeof params.error === "string" ? (
         <div className="rounded-[1.25rem] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -59,84 +70,27 @@ export default async function StockPage({ searchParams }: StockPageProps) {
 
       <section className="grid gap-6 xl:grid-cols-2">
         <Surface
-          title="Add inventory item"
-          description="Every gift should be stored with its current cost and available quantity."
+          title="Add product"
+          description="Create the inventory item and its storefront metadata together so Stock stays the only place you need for product setup."
         >
           <div className="space-y-4">
             <p className="text-sm leading-6 text-stone-600">
-              Open a focused form when you want to add a new gift item. This keeps the stock page
-              lighter while you are reviewing current inventory.
+              Add the backend product record here with quantity, cost, frontend name, selling
+              price, colours, category, collections, and images.
             </p>
             <ModalLauncher
-              title="Add inventory item"
-              description="Save a new mystery scoop gift with its latest cost and opening quantity."
-              triggerLabel="Add new item"
+              title="Add product"
+              description="Create a product with stock, pricing, category, collections, and image metadata."
+              triggerLabel="Add new product"
               triggerClassName="inline-flex items-center rounded-full bg-stone-950 px-5 py-3 text-sm font-semibold text-stone-50 transition hover:bg-stone-800"
             >
-              <form action={createProductAction} className="grid gap-4 md:grid-cols-2">
-                <label className="block md:col-span-2">
-                  <span className="mb-2 block text-sm font-medium text-stone-700">
-                    Product name
-                  </span>
-                  <input
-                    type="text"
-                    name="name"
-                    className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
-                    placeholder="Hair Clip"
-                    required
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="mb-2 block text-sm font-medium text-stone-700">
-                    Cost price
-                  </span>
-                  <input
-                    type="number"
-                    name="unit_cost"
-                    min="0"
-                    step="0.01"
-                    defaultValue="0"
-                    className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
-                    required
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="mb-2 block text-sm font-medium text-stone-700">
-                    Opening quantity
-                  </span>
-                  <input
-                    type="number"
-                    name="stock_quantity"
-                    min="0"
-                    defaultValue="0"
-                    className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
-                    required
-                  />
-                </label>
-
-                <label className="block md:col-span-2">
-                  <span className="mb-2 block text-sm font-medium text-stone-700">
-                    Category
-                  </span>
-                  <input
-                    type="text"
-                    name="category"
-                    defaultValue="Mystery Scoop"
-                    className="w-full rounded-[1.25rem] border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
-                  />
-                </label>
-
-                <div className="md:col-span-2">
-                  <SubmitButton
-                    pendingLabel="Saving item..."
-                    className="inline-flex items-center rounded-full bg-stone-950 px-5 py-3 text-sm font-semibold text-stone-50 transition hover:bg-stone-800"
-                  >
-                    Save item
-                  </SubmitButton>
-                </div>
-              </form>
+              <CatalogProductForm
+                action={createProductAction}
+                categories={categories}
+                collections={collections}
+                submitLabel="Save product"
+                pendingLabel="Saving product..."
+              />
             </ModalLauncher>
           </div>
         </Surface>
@@ -183,8 +137,8 @@ export default async function StockPage({ searchParams }: StockPageProps) {
         </Surface>
 
         <Surface
-          title="Current inventory"
-          description="Track how much stock has been purchased overall and how much is currently left for mystery scoop fulfilment."
+          title="Products"
+          description="This is the single product table for the app. Each row keeps both stock numbers and storefront-facing metadata."
         >
           <div className="overflow-hidden rounded-[1.5rem] border border-stone-200">
             <div className="overflow-x-auto">
@@ -193,11 +147,13 @@ export default async function StockPage({ searchParams }: StockPageProps) {
                   <tr>
                     {[
                       "Product",
+                      "Frontend name",
                       "Category",
+                      "Collections",
+                      "Selling price",
                       "Total purchased",
                       "Current quantity",
                       "Cost",
-                      "Stock value",
                       "Actions",
                     ].map(
                       (heading) => (
@@ -212,13 +168,31 @@ export default async function StockPage({ searchParams }: StockPageProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100 bg-white">
-                  {products.length > 0 ? (
-                    products.map((product) => (
+                  {catalogProducts.length > 0 ? (
+                    catalogProducts.map((product) => (
                       <tr key={product.id}>
                         <td className="px-4 py-4 font-medium text-stone-900">
-                          {product.name}
+                          <div>
+                            <p>{product.name}</p>
+                            <p className="mt-1 text-xs uppercase tracking-[0.2em] text-stone-500">
+                              /{product.slug || "missing-slug"}
+                            </p>
+                          </div>
                         </td>
-                        <td className="px-4 py-4 text-stone-600">{product.category}</td>
+                        <td className="px-4 py-4 text-stone-600">
+                          {product.view_name || "Uses product name"}
+                        </td>
+                        <td className="px-4 py-4 text-stone-600">
+                          {product.category_record?.name ?? product.category}
+                        </td>
+                        <td className="px-4 py-4 text-stone-600">
+                          {product.collections.length > 0
+                            ? product.collections.map((collection) => collection.name).join(", ")
+                            : "No collections"}
+                        </td>
+                        <td className="px-4 py-4 text-stone-700">
+                          {formatCurrency(product.selling_price || product.base_price)}
+                        </td>
                         <td className="px-4 py-4 text-stone-700">
                           {product.total_purchased_quantity}
                         </td>
@@ -227,9 +201,6 @@ export default async function StockPage({ searchParams }: StockPageProps) {
                         </td>
                         <td className="px-4 py-4 text-stone-700">
                           {formatCurrency(product.unit_cost)}
-                        </td>
-                        <td className="px-4 py-4 text-stone-700">
-                          {formatCurrency(product.unit_cost * product.stock_quantity)}
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex flex-wrap items-center gap-2">
@@ -254,8 +225,8 @@ export default async function StockPage({ searchParams }: StockPageProps) {
                     ))
                   ) : (
                     <tr>
-                      <td className="px-4 py-6 text-stone-500" colSpan={7}>
-                        No inventory items yet. Add the first gift item above.
+                      <td className="px-4 py-6 text-stone-500" colSpan={9}>
+                        No products yet. Add the first one above.
                       </td>
                     </tr>
                   )}
