@@ -45,6 +45,17 @@ function getOptionalNumber(formData: FormData, key: string) {
   return value ? Number(value) : null;
 }
 
+function indiaLocalDateTimeToUtc(value: string) {
+  if (!value) {
+    return null;
+  }
+
+  const hasTimeZone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(value);
+  const parsed = new Date(hasTimeZone ? value : `${value}+05:30`);
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 function refreshApp() {
   revalidatePath("/");
   revalidatePath("/products");
@@ -960,12 +971,18 @@ export async function createDiscountAction(formData: FormData) {
   const targetId = getNumber(formData, "target_id");
   const amount = Math.max(0, getNumber(formData, "amount"));
   const type = getText(formData, "type");
-  const startAt = getText(formData, "start_at");
-  const endAt = getText(formData, "end_at");
-  const active = getText(formData, "active") !== "false";
+  const startAtInput = getText(formData, "start_at");
+  const endAtInput = getText(formData, "end_at");
+  const startAt = indiaLocalDateTimeToUtc(startAtInput);
+  const endAt = indiaLocalDateTimeToUtc(endAtInput);
+  const active = getBooleanInput(formData, "active", true);
 
   if (!targetType || !targetId || !amount || !type) {
     redirect("/discounts?error=missing-discount-fields");
+  }
+
+  if ((startAtInput && !startAt) || (endAtInput && !endAt)) {
+    redirect("/discounts?error=invalid-discount-window");
   }
 
   const { error } = await getSupabase().from("discounts").insert({
@@ -973,8 +990,8 @@ export async function createDiscountAction(formData: FormData) {
     target_id: targetId,
     amount,
     type,
-    start_at: startAt || null,
-    end_at: endAt || null,
+    start_at: startAt,
+    end_at: endAt,
     active,
   });
 
@@ -990,12 +1007,18 @@ export async function updateDiscountAction(formData: FormData) {
   const discountId = getNumber(formData, "discount_id");
   const amount = Math.max(0, getNumber(formData, "amount"));
   const type = getText(formData, "type");
-  const startAt = getText(formData, "start_at");
-  const endAt = getText(formData, "end_at");
-  const active = getText(formData, "active") !== "false";
+  const startAtInput = getText(formData, "start_at");
+  const endAtInput = getText(formData, "end_at");
+  const startAt = indiaLocalDateTimeToUtc(startAtInput);
+  const endAt = indiaLocalDateTimeToUtc(endAtInput);
+  const active = getBooleanInput(formData, "active", true);
 
   if (!discountId || !amount || !type) {
     redirect("/discounts?error=invalid-discount-update");
+  }
+
+  if ((startAtInput && !startAt) || (endAtInput && !endAt)) {
+    redirect("/discounts?error=invalid-discount-window");
   }
 
   const { error } = await getSupabase()
@@ -1003,8 +1026,8 @@ export async function updateDiscountAction(formData: FormData) {
     .update({
       amount,
       type,
-      start_at: startAt || null,
-      end_at: endAt || null,
+      start_at: startAt,
+      end_at: endAt,
       active,
     })
     .eq("id", discountId);
