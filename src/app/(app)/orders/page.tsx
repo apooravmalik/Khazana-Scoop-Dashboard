@@ -37,6 +37,8 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
   const openCostCount = orders.filter(
     (order) => order.delivery_cost === null || order.packaging_cost === null,
   ).length;
+  const websiteCount = orders.filter((order) => order.order_source === "website").length;
+  const dashboardCount = orders.filter((order) => order.order_source === "dashboard").length;
 
   return (
     <AppShell
@@ -49,7 +51,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
         </div>
       ) : null}
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-[1.5rem] border border-stone-200 bg-stone-50/70 p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-stone-500">
             Pending
@@ -75,6 +77,15 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
           <p className="mt-4 font-serif text-4xl text-stone-950">{openCostCount}</p>
           <p className="mt-2 text-sm text-stone-600">
             Orders where delivery or packaging cost is still empty.
+          </p>
+        </div>
+        <div className="rounded-[1.5rem] border border-stone-200 bg-stone-50/70 p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-stone-500">
+            Website orders
+          </p>
+          <p className="mt-4 font-serif text-4xl text-stone-950">{websiteCount}</p>
+          <p className="mt-2 text-sm text-stone-600">
+            Online orders created from the storefront and waiting in this same queue.
           </p>
         </div>
       </section>
@@ -128,7 +139,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
 
         <Surface
           title="Order tracker"
-          description="Fill delivery and packaging cost later, and keep delivery plus payment status up to date."
+          description={`Fill delivery and packaging cost later, and keep delivery plus payment status up to date. ${dashboardCount} admin order${dashboardCount === 1 ? "" : "s"} and ${websiteCount} website order${websiteCount === 1 ? "" : "s"} are currently saved.`}
         >
           <div className="space-y-4">
             {orders.length > 0 ? (
@@ -142,7 +153,18 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
 
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div>
-                      <p className="font-semibold text-stone-900">{order.customer_name}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-stone-900">{order.customer_name}</p>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${
+                            order.order_source === "website"
+                              ? "bg-sky-100 text-sky-700"
+                              : "bg-stone-200 text-stone-700"
+                          }`}
+                        >
+                          {order.order_source === "website" ? "Website" : "Admin"}
+                        </span>
+                      </div>
                       <p className="mt-1 text-sm text-stone-600">
                         {order.customer_phone} · {order.scoop_name}
                       </p>

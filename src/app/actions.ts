@@ -1392,6 +1392,7 @@ export async function createOrderAction(formData: FormData) {
       net_profit: netProfit,
       delivery_status: deliveryStatus,
       payment_status: paymentStatus,
+      order_source: "dashboard",
       ordered_at: orderedAt,
       delivery_date: deliveryDate || null,
     })

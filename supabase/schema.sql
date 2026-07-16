@@ -102,6 +102,8 @@ create table if not exists public.orders (
     check (delivery_status in ('pending', 'delivering', 'delivered', 'cancelled')),
   payment_status text not null default 'unpaid'
     check (payment_status in ('unpaid', 'partial', 'paid')),
+  order_source text not null default 'dashboard'
+    check (order_source in ('dashboard', 'website')),
   ordered_at date not null,
   delivery_date date,
   created_at timestamptz not null default now()
@@ -142,6 +144,7 @@ create index if not exists idx_products_name on public.products(name);
 create index if not exists idx_products_slug on public.products(slug);
 create index if not exists idx_products_category_id on public.products(category_id);
 create index if not exists idx_orders_ordered_at on public.orders(ordered_at desc);
+create index if not exists idx_orders_order_source on public.orders(order_source);
 create index if not exists idx_order_items_order_id on public.order_items(order_id);
 create index if not exists idx_stock_movements_created_at on public.stock_movements(created_at desc);
 create index if not exists idx_stock_movements_product_id on public.stock_movements(product_id);

@@ -49,7 +49,7 @@ export default async function EditOrderPage({
   return (
     <AppShell
       title={`Edit order #${order.id}`}
-      description="Update customer details, scoop type, selected gifts, and optional delivery or packaging costs from one place."
+      description={`${order.order_source === "website" ? "Website order" : "Admin order"}: update customer details, selected gifts, payment, delivery, and optional delivery or packaging costs from one place.`}
     >
       {typeof query.error === "string" ? (
         <div className="rounded-[1.25rem] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -62,6 +62,12 @@ export default async function EditOrderPage({
           title="Edit mystery scoop order"
           description="Changing the gift checklist here will also rebalance stock quantities automatically."
         >
+          <div className="mb-4 rounded-[1.25rem] border border-stone-200 bg-stone-50/70 px-4 py-3 text-sm text-stone-600">
+            Source:{" "}
+            <span className="font-semibold text-stone-950">
+              {order.order_source === "website" ? "Website checkout" : "Dashboard entry"}
+            </span>
+          </div>
           <form action={updateOrderAction} className="grid gap-4">
             <input type="hidden" name="order_id" value={order.id} />
             <OrderBuilder

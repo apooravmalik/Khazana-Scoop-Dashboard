@@ -30,6 +30,7 @@ type OrderRecord = {
   customer_name: string;
   customer_phone: string;
   customer_address: string;
+  order_source: "dashboard" | "website" | null;
   scoop_type_id: number | null;
   scoop_name_snapshot: string;
   scoop_price: number;
@@ -120,6 +121,7 @@ function mapOrderRow(order: OrderRecord): OrderRow {
     customer_name: order.customer_name,
     customer_phone: order.customer_phone,
     customer_address: order.customer_address,
+    order_source: order.order_source === "website" ? "website" : "dashboard",
     scoop_name: order.scoop_name_snapshot,
     scoop_price: toNumber(order.scoop_price),
     gift_count: Number(order.gift_count),
@@ -227,6 +229,7 @@ async function getOrdersInternal(limit?: number) {
         customer_name,
         customer_phone,
         customer_address,
+        order_source,
         scoop_type_id,
         scoop_name_snapshot,
         scoop_price,
@@ -320,6 +323,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         customer_name,
         customer_phone,
         customer_address,
+        order_source,
         scoop_type_id,
         scoop_name_snapshot,
         scoop_price,
@@ -433,6 +437,8 @@ export async function getDashboardData(): Promise<DashboardData> {
       pendingOrders: allOrders.filter((order) => order.delivery_status === "pending").length,
       deliveringOrders: allOrders.filter((order) => order.delivery_status === "delivering")
         .length,
+      dashboardOrders: allOrders.filter((order) => order.order_source !== "website").length,
+      websiteOrders: allOrders.filter((order) => order.order_source === "website").length,
     },
     lowStockItems,
     recentOrders,
@@ -906,6 +912,7 @@ export async function getOrderById(orderId: number): Promise<OrderDetail | null>
         customer_name,
         customer_phone,
         customer_address,
+        order_source,
         scoop_type_id,
         scoop_name_snapshot,
         scoop_price,

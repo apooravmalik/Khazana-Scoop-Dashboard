@@ -107,6 +107,7 @@ export type OrderRow = {
   customer_name: string;
   customer_phone: string;
   customer_address: string;
+  order_source: "dashboard" | "website";
   scoop_name: string;
   scoop_price: number;
   gift_count: number;
@@ -160,6 +161,8 @@ export type DashboardMetrics = {
   lowStockCount: number;
   pendingOrders: number;
   deliveringOrders: number;
+  dashboardOrders: number;
+  websiteOrders: number;
 };
 
 export type DashboardData = {

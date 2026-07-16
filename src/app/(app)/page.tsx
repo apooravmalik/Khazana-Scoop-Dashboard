@@ -169,7 +169,7 @@ export default async function DashboardPage() {
           title="Operational signals"
           description="Use these signals to stay ahead of fulfilment, payment collection, and missing cost updates."
         >
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <div className="rounded-[1.5rem] border border-sky-200 bg-sky-50/70 p-5">
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-700">
                 Pending orders
@@ -212,6 +212,28 @@ export default async function DashboardPage() {
               </p>
               <p className="mt-2 text-sm leading-6 text-stone-600">
                 Unpaid and partial orders remain in pending cash until fully paid.
+              </p>
+            </div>
+            <div className="rounded-[1.5rem] border border-sky-200 bg-sky-50/70 p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-700">
+                Website orders
+              </p>
+              <p className="mt-4 font-serif text-4xl text-stone-950">
+                {formatCount(metrics.websiteOrders)}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-stone-600">
+                Storefront orders saved into the shared business queue.
+              </p>
+            </div>
+            <div className="rounded-[1.5rem] border border-stone-200 bg-stone-50/70 p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-stone-500">
+                Admin orders
+              </p>
+              <p className="mt-4 font-serif text-4xl text-stone-950">
+                {formatCount(metrics.dashboardOrders)}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-stone-600">
+                Orders entered manually from this dashboard.
               </p>
             </div>
           </div>
@@ -344,7 +366,15 @@ export default async function DashboardPage() {
             <table className="min-w-full divide-y divide-stone-200 text-left text-sm">
               <thead className="bg-stone-100/80">
                 <tr>
-                  {["Customer", "Scoop", "Gifts", "Revenue", "Contribution Profit", "Payment"].map(
+                  {[
+                    "Customer",
+                    "Source",
+                    "Scoop",
+                    "Gifts",
+                    "Revenue",
+                    "Contribution Profit",
+                    "Payment",
+                  ].map(
                     (heading) => (
                       <th
                         key={heading}
@@ -362,6 +392,17 @@ export default async function DashboardPage() {
                     <tr key={order.id}>
                       <td className="px-4 py-4 font-medium text-stone-900">
                         {order.customer_name}
+                      </td>
+                      <td className="px-4 py-4">
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${
+                            order.order_source === "website"
+                              ? "bg-sky-100 text-sky-700"
+                              : "bg-stone-200 text-stone-700"
+                          }`}
+                        >
+                          {order.order_source === "website" ? "Website" : "Admin"}
+                        </span>
                       </td>
                       <td className="px-4 py-4 text-stone-600">{order.scoop_name}</td>
                       <td className="px-4 py-4 text-stone-600">{order.products_summary}</td>
@@ -387,7 +428,7 @@ export default async function DashboardPage() {
                   ))
                 ) : (
                   <tr>
-                    <td className="px-4 py-6 text-stone-500" colSpan={6}>
+                    <td className="px-4 py-6 text-stone-500" colSpan={7}>
                       No scoop orders recorded yet.
                     </td>
                   </tr>
