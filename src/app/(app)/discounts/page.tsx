@@ -19,6 +19,22 @@ const discountTypeLabels = {
   percent: "Percent",
 } as const;
 
+const INDIA_UTC_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+function toIndiaDateTimeLocalValue(value: string | null) {
+  if (!value) {
+    return "";
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return new Date(parsed.getTime() + INDIA_UTC_OFFSET_MS).toISOString().slice(0, 16);
+}
+
 export default async function DiscountsPage() {
   const [discounts, products, categories, collections] = await Promise.all([
     getDiscounts(),
@@ -196,7 +212,7 @@ export default async function DiscountsPage() {
                           <input
                             type="datetime-local"
                             name="start_at"
-                            defaultValue={discount.start_at ? discount.start_at.slice(0, 16) : ""}
+                            defaultValue={toIndiaDateTimeLocalValue(discount.start_at)}
                             className="w-full rounded-[1.1rem] border border-stone-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-stone-950"
                           />
                         </label>
@@ -205,7 +221,7 @@ export default async function DiscountsPage() {
                           <input
                             type="datetime-local"
                             name="end_at"
-                            defaultValue={discount.end_at ? discount.end_at.slice(0, 16) : ""}
+                            defaultValue={toIndiaDateTimeLocalValue(discount.end_at)}
                             className="w-full rounded-[1.1rem] border border-stone-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-stone-950"
                           />
                         </label>
