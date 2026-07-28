@@ -1040,9 +1040,21 @@ export async function uploadProductImageAction(formData: FormData) {
   const makePrimary = getBooleanInput(formData, "make_primary", false);
   const imageFile = formData.get("image");
   const bucket = "product-images";
+  const maxImageSizeBytes = 5 * 1024 * 1024;
 
   if (!productId || !colourName || !(imageFile instanceof File) || imageFile.size === 0) {
     redirect(`/stock/${productId || ""}?error=missing-image-file`);
+  }
+
+  if (imageFile.size > maxImageSizeBytes) {
+    redirect(
+      `/stock/${productId}?${buildProductImageDebugParams({
+        error: "image-too-large",
+        step: "validate-image-size",
+        detail: "Upload a product image up to 5 MB.",
+        bucket,
+      })}`,
+    );
   }
 
   const allowedTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
