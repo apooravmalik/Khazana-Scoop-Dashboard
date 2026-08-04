@@ -182,7 +182,29 @@ export function CatalogProductForm({
           defaultChecked={product?.active ?? true}
           className="h-4 w-4 rounded border-stone-300 text-stone-950"
         />
-        Product is active on the storefront
+        Product is active in the dashboard and scoop builder
+      </label>
+
+      <label className="flex items-start gap-3 rounded-[1.25rem] border border-stone-200 bg-stone-50/70 px-4 py-4 text-sm text-stone-700">
+        <input
+          type="hidden"
+          name="website_visible"
+          value={product?.website_visible === false ? "false" : "true"}
+        />
+        <input
+          type="checkbox"
+          name="website_visible"
+          value="true"
+          defaultChecked={product?.website_visible ?? true}
+          className="mt-0.5 h-4 w-4 rounded border-stone-300 text-stone-950"
+        />
+        <span>
+          <span className="block font-medium text-stone-700">List individually on website</span>
+          <span className="mt-1 block text-xs leading-5 text-stone-500">
+            Turn this off to keep the product available in the dashboard, scoop, and Build Your Box
+            flows without showing it in the individual website catalogue.
+          </span>
+        </span>
       </label>
 
       <div className="flex flex-wrap items-center gap-3">

@@ -10,6 +10,7 @@ export type Product = {
   selling_price: number;
   view_name: string | null;
   active: boolean;
+  website_visible: boolean;
   primary_image_url: string | null;
   available_colours: string[];
   sort_order: number;

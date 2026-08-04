@@ -20,6 +20,7 @@ create table if not exists public.products (
   selling_price numeric(12, 2) not null default 0,
   view_name text,
   active boolean not null default true,
+  website_visible boolean not null default true,
   primary_image_url text,
   available_colours text[] not null default '{}',
   sort_order integer not null default 0,

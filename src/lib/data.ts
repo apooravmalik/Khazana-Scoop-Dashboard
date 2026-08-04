@@ -453,7 +453,7 @@ export async function getProducts(): Promise<Product[]> {
   const { data, error } = await supabase
     .from("products")
     .select(
-      "id, name, sku, slug, category, category_id, description, base_price, selling_price, view_name, active, primary_image_url, available_colours, sort_order, total_purchased_quantity, stock_quantity, unit_cost, created_at, updated_at",
+      "id, name, sku, slug, category, category_id, description, base_price, selling_price, view_name, active, website_visible, primary_image_url, available_colours, sort_order, total_purchased_quantity, stock_quantity, unit_cost, created_at, updated_at",
     )
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true })
@@ -465,7 +465,8 @@ export async function getProducts(): Promise<Product[]> {
     hasMissingColumnError(error, "base_price") ||
     hasMissingColumnError(error, "available_colours") ||
     hasMissingColumnError(error, "selling_price") ||
-    hasMissingColumnError(error, "view_name")
+    hasMissingColumnError(error, "view_name") ||
+    hasMissingColumnError(error, "website_visible")
   ) {
     const [fallbackResult, purchasedTotals] = await Promise.all([
       supabase
@@ -493,6 +494,7 @@ export async function getProducts(): Promise<Product[]> {
       selling_price: 0,
       view_name: null,
       active: true,
+      website_visible: true,
       primary_image_url: null,
       available_colours: [],
       sort_order: 0,
@@ -512,6 +514,7 @@ export async function getProducts(): Promise<Product[]> {
     base_price: toNumber(product.base_price),
     selling_price: toNumber(product.selling_price),
     view_name: product.view_name,
+    website_visible: Boolean(product.website_visible ?? true),
     available_colours: toStringArray(product.available_colours),
     sort_order: Number(product.sort_order),
     total_purchased_quantity: Number(product.total_purchased_quantity),
@@ -525,7 +528,7 @@ export async function getProductById(productId: number): Promise<Product | null>
   const { data, error } = await supabase
     .from("products")
     .select(
-      "id, name, sku, slug, category, category_id, description, base_price, selling_price, view_name, active, primary_image_url, available_colours, sort_order, total_purchased_quantity, stock_quantity, unit_cost, created_at, updated_at",
+      "id, name, sku, slug, category, category_id, description, base_price, selling_price, view_name, active, website_visible, primary_image_url, available_colours, sort_order, total_purchased_quantity, stock_quantity, unit_cost, created_at, updated_at",
     )
     .eq("id", productId)
     .maybeSingle();
@@ -536,7 +539,8 @@ export async function getProductById(productId: number): Promise<Product | null>
     hasMissingColumnError(error, "base_price") ||
     hasMissingColumnError(error, "available_colours") ||
     hasMissingColumnError(error, "selling_price") ||
-    hasMissingColumnError(error, "view_name")
+    hasMissingColumnError(error, "view_name") ||
+    hasMissingColumnError(error, "website_visible")
   ) {
     const [{ data: fallbackData, error: fallbackError }, purchasedTotals] = await Promise.all([
       supabase
@@ -571,6 +575,7 @@ export async function getProductById(productId: number): Promise<Product | null>
       selling_price: 0,
       view_name: null,
       active: true,
+      website_visible: true,
       primary_image_url: null,
       available_colours: [],
       sort_order: 0,
@@ -596,6 +601,7 @@ export async function getProductById(productId: number): Promise<Product | null>
     base_price: toNumber(product.base_price),
     selling_price: toNumber(product.selling_price),
     view_name: product.view_name,
+    website_visible: Boolean(product.website_visible ?? true),
     available_colours: toStringArray(product.available_colours),
     sort_order: Number(product.sort_order),
     total_purchased_quantity: Number(product.total_purchased_quantity),

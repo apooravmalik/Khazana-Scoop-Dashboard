@@ -486,6 +486,7 @@ export async function createProductAction(formData: FormData) {
   const sellingPrice = Math.max(0, getOptionalNumber(formData, "selling_price") ?? 0);
   const collectionIds = getNumberList(formData, "collection_ids");
   const active = getBooleanInput(formData, "active", true);
+  const websiteVisible = getBooleanInput(formData, "website_visible", true);
 
   if (!name) {
     redirect("/stock?error=missing-product-name");
@@ -503,10 +504,11 @@ export async function createProductAction(formData: FormData) {
       category_id: categoryId,
         view_name: viewName,
         description,
-        base_price: sellingPrice,
-        selling_price: sellingPrice,
-        active,
-        primary_image_url: null,
+      base_price: sellingPrice,
+      selling_price: sellingPrice,
+      active,
+      website_visible: websiteVisible,
+      primary_image_url: null,
         available_colours: [],
         sort_order: 0,
         total_purchased_quantity: initialStock,
@@ -519,7 +521,8 @@ export async function createProductAction(formData: FormData) {
   if (
     hasMissingTotalPurchasedColumnError(error) ||
     hasMissingColumnError(error, "selling_price") ||
-    hasMissingColumnError(error, "view_name")
+    hasMissingColumnError(error, "view_name") ||
+    hasMissingColumnError(error, "website_visible")
   ) {
     const retryResult = await supabase
       .from("products")
@@ -579,6 +582,7 @@ export async function updateProductAction(formData: FormData) {
   const description = getText(formData, "description") || null;
   const sellingPrice = Math.max(0, getOptionalNumber(formData, "selling_price") ?? 0);
   const active = getBooleanInput(formData, "active", true);
+  const websiteVisible = getBooleanInput(formData, "website_visible", true);
   const collectionIds = getNumberList(formData, "collection_ids");
   const existingColours = getTextLines(formData, "available_colours");
 
@@ -599,6 +603,7 @@ export async function updateProductAction(formData: FormData) {
       base_price: sellingPrice,
       selling_price: sellingPrice,
       active,
+      website_visible: websiteVisible,
       available_colours: existingColours,
       unit_cost: unitCost,
       updated_at: getIsoTimestamp(),
@@ -610,7 +615,8 @@ export async function updateProductAction(formData: FormData) {
     error?.message.includes("base_price") ||
     error?.message.includes("available_colours") ||
     error?.message.includes("selling_price") ||
-    error?.message.includes("view_name")
+    error?.message.includes("view_name") ||
+    error?.message.includes("website_visible")
   ) {
     const retryResult = await supabase
       .from("products")

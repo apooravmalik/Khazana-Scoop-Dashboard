@@ -60,7 +60,7 @@ export default async function StockPage({ searchParams }: StockPageProps) {
   return (
     <AppShell
       title="Stock"
-      description="Manage the full product record from one place: stock, pricing, frontend naming, colours, categories, collections, and images. Scoop prices still control the mystery scoop order flow, while product selling prices stay on each item record."
+      description="Manage the full product record from one place: stock, pricing, frontend naming, website visibility, colours, categories, collections, and images. Scoop prices still control the mystery scoop order flow, while product selling prices stay on each item record."
     >
       {typeof params.error === "string" ? (
         <div className="rounded-[1.25rem] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -150,6 +150,7 @@ export default async function StockPage({ searchParams }: StockPageProps) {
                       "Frontend name",
                       "Category",
                       "Collections",
+                      "Website listing",
                       "Selling price",
                       "Total purchased",
                       "Current quantity",
@@ -190,6 +191,9 @@ export default async function StockPage({ searchParams }: StockPageProps) {
                             ? product.collections.map((collection) => collection.name).join(", ")
                             : "No collections"}
                         </td>
+                        <td className="px-4 py-4 text-stone-600">
+                          {product.website_visible ? "Listed individually" : "Scoop / Build Your Box only"}
+                        </td>
                         <td className="px-4 py-4 text-stone-700">
                           {formatCurrency(product.selling_price || product.base_price)}
                         </td>
@@ -225,7 +229,7 @@ export default async function StockPage({ searchParams }: StockPageProps) {
                     ))
                   ) : (
                     <tr>
-                      <td className="px-4 py-6 text-stone-500" colSpan={9}>
+                      <td className="px-4 py-6 text-stone-500" colSpan={10}>
                         No products yet. Add the first one above.
                       </td>
                     </tr>
