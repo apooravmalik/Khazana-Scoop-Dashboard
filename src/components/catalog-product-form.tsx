@@ -173,7 +173,7 @@ export function CatalogProductForm({
         <input
           type="hidden"
           name="active"
-          value={product?.active === false ? "false" : "true"}
+          value="false"
         />
         <input
           type="checkbox"
@@ -189,7 +189,7 @@ export function CatalogProductForm({
         <input
           type="hidden"
           name="website_visible"
-          value={product?.website_visible === false ? "false" : "true"}
+          value="false"
         />
         <input
           type="checkbox"
