@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { loginOwner, logoutOwner } from "@/lib/auth";
 import { manualExpenseCategories } from "@/lib/constants";
 import { getSupabase } from "@/lib/db";
+import { getCheckboxInput } from "@/lib/form-inputs";
 
 type SelectedOrderItem = {
   productId: number;
@@ -167,16 +168,6 @@ function getTextLines(formData: FormData, key: string) {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-}
-
-function getBooleanInput(formData: FormData, key: string, defaultValue = true) {
-  const values = formData.getAll(key).map((value) => String(value));
-
-  if (values.length === 0) {
-    return defaultValue;
-  }
-
-  return values[values.length - 1] === "true";
 }
 
 function asNullablePositiveInteger(value: number | null) {
@@ -485,8 +476,8 @@ export async function createProductAction(formData: FormData) {
   const description = getText(formData, "description") || null;
   const sellingPrice = Math.max(0, getOptionalNumber(formData, "selling_price") ?? 0);
   const collectionIds = getNumberList(formData, "collection_ids");
-  const active = getBooleanInput(formData, "active", true);
-  const websiteVisible = getBooleanInput(formData, "website_visible", true);
+  const active = getCheckboxInput(formData, "active");
+  const websiteVisible = getCheckboxInput(formData, "website_visible");
 
   if (!name) {
     redirect("/stock?error=missing-product-name");
@@ -581,8 +572,8 @@ export async function updateProductAction(formData: FormData) {
   const viewName = getText(formData, "view_name") || null;
   const description = getText(formData, "description") || null;
   const sellingPrice = Math.max(0, getOptionalNumber(formData, "selling_price") ?? 0);
-  const active = getBooleanInput(formData, "active", true);
-  const websiteVisible = getBooleanInput(formData, "website_visible", true);
+  const active = getCheckboxInput(formData, "active");
+  const websiteVisible = getCheckboxInput(formData, "website_visible");
   const collectionIds = getNumberList(formData, "collection_ids");
   const existingColours = getTextLines(formData, "available_colours");
 
@@ -804,7 +795,7 @@ export async function createCategoryAction(formData: FormData) {
   const name = getText(formData, "name");
   const slug = slugifyRoute(getText(formData, "slug") || name);
   const sortOrder = Math.max(0, getNumber(formData, "sort_order"));
-  const active = getBooleanInput(formData, "active", true);
+  const active = getCheckboxInput(formData, "active", true);
 
   if (!name) {
     redirect("/categories?error=missing-category-name");
@@ -830,7 +821,7 @@ export async function updateCategoryAction(formData: FormData) {
   const name = getText(formData, "name");
   const slug = slugifyRoute(getText(formData, "slug") || name);
   const sortOrder = Math.max(0, getNumber(formData, "sort_order"));
-  const active = getBooleanInput(formData, "active", true);
+  const active = getCheckboxInput(formData, "active", true);
 
   if (!categoryId || !name) {
     redirect("/categories?error=invalid-category-update");
@@ -873,7 +864,7 @@ export async function createCollectionAction(formData: FormData) {
   const slug = slugifyRoute(getText(formData, "slug") || name);
   const description = getText(formData, "description") || null;
   const sortOrder = Math.max(0, getNumber(formData, "sort_order"));
-  const active = getBooleanInput(formData, "active", true);
+  const active = getCheckboxInput(formData, "active", true);
 
   if (!name) {
     redirect("/collections?error=missing-collection-name");
@@ -913,7 +904,7 @@ export async function updateCollectionAction(formData: FormData) {
   const slug = slugifyRoute(getText(formData, "slug") || name);
   const description = getText(formData, "description") || null;
   const sortOrder = Math.max(0, getNumber(formData, "sort_order"));
-  const active = getBooleanInput(formData, "active", true);
+  const active = getCheckboxInput(formData, "active", true);
 
   if (!collectionId || !name) {
     redirect("/collections?error=invalid-collection-update");
@@ -1043,7 +1034,7 @@ export async function deleteDiscountAction(formData: FormData) {
 export async function uploadProductImageAction(formData: FormData) {
   const productId = getNumber(formData, "product_id");
   const colourName = getText(formData, "colour_name");
-  const makePrimary = getBooleanInput(formData, "make_primary", false);
+  const makePrimary = getCheckboxInput(formData, "make_primary");
   const imageFile = formData.get("image");
   const bucket = "product-images";
   const maxImageSizeBytes = 5 * 1024 * 1024;
